@@ -1,3 +1,9 @@
+## Repository structure
+
+<details>
+  <summary><strong>Repository Structure (click to expand)</strong></summary>
+
+```text
 
 Live-Fraud-Agent/
 ├── README.md                    # Demo GIF + docker-compose up instructions
