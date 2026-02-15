@@ -1,76 +1,42 @@
 import pandas as pd
-from typing import List
+import numpy as np
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Haversine distance in km."""
+    R = 6371
+    d_lat, d_lon = np.radians(lat2 - lat1), np.radians(lon2 - lon1)
+    a = (np.sin(d_lat / 2)**2 + 
+         np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(d_lon / 2)**2)
+    return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-DEVICE_TYPES = ['Desktop', 'Tablet', 'Mobile', 'Laptop']
-PAYMENT_METHODS = ['Mobile Payment', 'Credit Card', 'Gift Card', 'Debit Card', 'Other']
-
-
-
-def extract_time_features(df: pd.DataFrame) -> pd.DataFrame:
+def preprocess_features(df: pd.DataFrame, for_agent: bool = False) -> pd.DataFrame:
+    """Feature engineering for fraud detection."""
     df = df.copy()
-    # Transaction_Time is '04:04:15' in your data
-    df['Hour'] = pd.to_datetime(df['Transaction_Time'], format='%H:%M:%S').dt.hour
-    df['Is_Night_Transaction'] = ((df['Hour'] >= 0) & (df['Hour'] <= 5)).astype(int)
-    return df
+    
+    # Temporal
+    df['trans_date_trans_time'] = pd.to_datetime(df['trans_date_trans_time'])
+    df['hour'] = df['trans_date_trans_time'].dt.hour
+    df['day_of_week'] = df['trans_date_trans_time'].dt.dayofweek
+    df['is_weekend'] = (df['day_of_week'] >= 5).astype(int)
+    df['is_night'] = ((df['hour'] >= 22) | (df['hour'] <= 3)).astype(int)
+    
+    # Demographics & Geospatial
+    df['age'] = (df['trans_date_trans_time'] - pd.to_datetime(df['dob'])).dt.days // 365 
+    df['dist_to_merchant'] = calculate_distance(df['lat'], df['long'], df['merch_lat'], df['merch_long'])
 
+    if for_agent:
+        return df[['category', 'amt', 'job', 'age', 'dist_to_merchant', 'hour', 'gender', 'city', 'state']]
+    
+    # XGBoost Native Categorical Encoding
+    cat_cols = ['category', 'gender', 'state']
+    for col in cat_cols:
+        df[col] = df[col].astype('category')
 
-def encode_loyalty_tier(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    loyalty_map = {
-        'Bronze': 1, 'Silver': 2, 'Gold': 3, 
-        'Platinum': 4, 'VIP': 5, 'Unknown': 0
-    }
-    # Fill NaN with 'Unknown' before mapping
-    df['Customer_Loyalty_Tier'] = df['Customer_Loyalty_Tier'].fillna('Unknown')
-    df['Loyalty_Score'] = df['Customer_Loyalty_Tier'].map(loyalty_map).fillna(0)
-    return df
-
-
-def one_hot_encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    for device in DEVICE_TYPES:
-        df[f'Device_Type_{device}'] = (df['Device_Type'] == device).astype(int)
-    for payment in PAYMENT_METHODS:
-        df[f'Payment_Method_{payment}'] = (df['Payment_Method'] == payment).astype(int)
-    return df
-
-
-def create_derived_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df['Customer_Age'] = df['Customer_Age'].fillna(median_age := df['Customer_Age'].median())
-    df['Purchase_to_Age'] = df['Purchase_Amount'] / (df['Customer_Age'] + 1)
-    return df
-
-
-def drop_non_model_columns(df: pd.DataFrame) -> pd.DataFrame:
-    # We drop these because XGBoost only understands numbers
-    cols_to_drop = [
-        'Transaction_ID', 'Customer_ID', 'Transaction_Date', 'Transaction_Time',
-        'Location', 'Store_ID', 'IP_Address', 'Product_SKU', 'Product_Category',
-        'Customer_Loyalty_Tier', 'Device_Type', 'Payment_Method', 'Fraud_Flag'
+    # Selection of features for modeling
+    feature_cols = [
+        'amt', 'city_pop', 'dist_to_merchant', 'age',
+        'hour', 'day_of_week', 'is_weekend', #'is_night',
+        'category', 'gender', 'state' # XGBoost will use these as categories
     ]
-    return df.drop(columns=[c for c in cols_to_drop if c in df.columns])
-
-
-def preprocess_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df = extract_time_features(df)
-    df = encode_loyalty_tier(df)
-    df = one_hot_encode_categoricals(df)
-    df = create_derived_features(df)
-    # Footfall_Count is already numeric, so it stays!
-    df = drop_non_model_columns(df)
-    return df
-
-
-if __name__ == "__main__":
-    print("Testing pipeline...")
-    # Just a quick print to make sure the math works
-    test_df = pd.DataFrame([{
-        'Transaction_Time': '04:00:00', 'Customer_Age': 25, 
-        'Purchase_Amount': 100, 'Customer_Loyalty_Tier': 'Silver',
-        'Device_Type': 'Mobile', 'Payment_Method': 'Credit Card',
-        'Footfall_Count': 300
-    }])
-    print(preprocess_features(test_df).columns)
+    
+    return df[feature_cols]
