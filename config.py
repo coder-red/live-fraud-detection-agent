@@ -10,9 +10,9 @@ MODEL_PARAMS = {
     'n_estimators': 500,
     'max_depth': 6,
     'learning_rate': 0.05,
-    'tree_method': 'hist',           # Fast histogram-based training
-    'enable_categorical': True,      # THE MAGIC FLAG
+    'tree_method': 'hist',           
+    'enable_categorical': True,     
     'use_label_encoder': False,
-    'eval_metric': 'aucpr',          # Best for fraud (Precision-Recall)
+    'eval_metric': 'aucpr',          
     'random_state': 42
 }
