@@ -22,7 +22,7 @@ Live-Fraud-Agent/
 │   └── tools.py
 │
 ├── src/                        # ML pipeline
-│   ├── inference.py           # XGBoost (0.73 AUC)
+│   ├── inference.py           # XGBoost 
 │   ├── features.py
 │   └── data.py
 │
