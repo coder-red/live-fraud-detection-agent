@@ -36,3 +36,14 @@ Live-Fraud-Agent/
 │   └── sample_fraud.csv
 └── models/
     └── xgboost_fraud.pkl
+
+
+
+Transaction → API Call → AI Reasoning → Decision
+                                            ↓
+                                     Is it BLOCK?
+                                     ↙          ↘
+                                  YES          NO
+                                   ↓            ↓
+                            Ask Human      Auto-approve
+                            (HITL)            (Done)

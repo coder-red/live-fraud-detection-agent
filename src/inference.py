@@ -34,14 +34,15 @@ class FraudInference:
         return {
             "is_fraud": bool(prob >= self.threshold),
             "probability": round(prob, 4),
-            "threshold": self.threshold
+            "threshold": self.threshold,
+            "features": self.feature_names
         }
 
 if __name__ == "__main__":
-    # Correct paths based on your tree
+    # Correct paths based on tree
     base_path = Path(__file__).parent.parent / "model"
     
-    # Use the .json file for the model!
+    # Use the .json file for our model
     m_path = str(base_path / "fraud_model.json")
     f_path = str(base_path / "feature_list.pkl")
 

@@ -8,3 +8,7 @@ xgboost
 fastapi
 uvicorn
 joblib
+langchain_groq
+langgraph
+requests
+python-dotenv
