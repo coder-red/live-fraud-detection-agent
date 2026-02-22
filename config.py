@@ -6,8 +6,6 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RAW_DATA_PATH = DATA_DIR / "fraudTrain.csv"
 MODEL_PATH = BASE_DIR / "model"
-SRC_PATH = BASE_DIR / "src"
-APP_PATH = BASE_DIR / "app"
 
 MODEL_PARAMS = {
     'n_estimators': 500,

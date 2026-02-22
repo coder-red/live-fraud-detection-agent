@@ -92,10 +92,10 @@ class HITLFraudAgent:
         return self.graph.invoke({"transaction": tx})
 
 if __name__ == "__main__":
-    # 1. Setup the transaction
+    # Setup the transaction
     test_tx = {
         "trans_date_trans_time": "2026-02-19 3:00:00",
-        "amt": 900000000000000000000000000000000099.99,
+        "amt": 9099.99,
         "category": "shopping_net",
         "merchant": "fraud_store_xyz",
         "lat": 40.71, "long": -74.00,
@@ -104,13 +104,13 @@ if __name__ == "__main__":
         "dob": "1990-01-01", "gender": "M", "job": "Engineer"
     }
     
-    # 2. Initialize and RUN
+    # Initialize and RUN
     agent = HITLFraudAgent()
     
     print("Starting Agent Investigation...")
     result = agent.run_on_transaction(test_tx)
     
-    # 3. Print the results clearly
+    # Print the results clearly
     print("\n" + "="*50)
     print("FINAL AGENT VERDICT")
     print("="*50)
