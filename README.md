@@ -34,6 +34,7 @@
   - [Lessons learned and recommendation](#lessons-learned-and-recommendation)
   - [Limitation and what can be improved](#limitation-and-what-can-be-improved)
   - [Repository structure](#repository-structure)
+  - [Agentic Decision Pipeline](#agentic-decision-pipeline)
 
 
 ## Business context
@@ -191,8 +192,11 @@ Live-Fraud-Agent/
 
 ```
 
+</details>
+
+## Agentic Decision Pipeline
 <details>
-  <summary><strong>Repository Structure (click to expand)</strong></summary>
+  <summary><strong>Agentic Decision Pipeline</strong></summary>
 
 
 
