@@ -29,6 +29,7 @@
   - [Data source](#data-source)
   - [Methods](#methods)
   - [Tech Stack](#tech-stack)
+  - [Quick Start](#quick-start)
   - [Quick glance at the results](#quick-glance-at-the-results)
   - [Lessons learned and recommendation](#lessons-learned-and-recommendation)
   - [Limitation and what can be improved](#limitation-and-what-can-be-improved)
@@ -36,7 +37,7 @@
 
 
 ## Business context
-This model identifies fraudulent credit card transactions in real time by combining XGBoost machine learning with an Agentic LLM investigator. By integrating LangGraph to handle "grey area" cases, the system is designed to catch sophisticated fraud patterns—like late-night online shopping bursts—that traditional rule-based systems often miss. Risk operations teams and fintech institutions use this to automate high-volume triage, reduce financial loss from chargebacks, and provide a "human-in-the-loop" layer for complex investigative decisions
+This model identifies fraudulent credit card transactions in real time by combining XGBoost machine learning with an Agentic LLM investigator. Risk operations teams and fintech institutions use this to automate high volume triage, reduce financial loss from chargebacks, and provide a human-in-the-loop layer for investigative decisions
 
 ## Data source
 
@@ -44,20 +45,54 @@ This model identifies fraudulent credit card transactions in real time by combin
 
 ## Methods
 
-- **Sentiment Engineering (NLP):** Extracted contextual sentiment from financial headlines using FinBERT. The model was optimized via ONNX to reduce inference latency, allowing for rapid processing of large-scale historical RSS archives.
-- **Feature engineering and sentiment extraction:** Integrated RSS feeds and Google Trends as exogenous variables, applied NLP based sentiment scoring to quantify market "panic"
-- **Benchmarking: Evaluated three distinct models:** GARCH(1,1), EGARCH-X, and XGBoost.
-- **Chronological Train/Test Split:** Used a fixed  split i.e 80% train / 20% test to preserve the time dependent structure of the market data and prevent random shuffling.
-- **Look-ahead Bias Prevention:** All exogenous features (Sentiments and trends) were lagged to ensure predictions rely strictly on information available at the time of the forecast.
+- **Two Step Security System:** Built a dual engine decision system that uses XGBoost model to scan every transaction and provide a probability scoring, integrated with LangGraph for behavioural investigation on suspicious cases.
+
+- **Behavioural Feature engineering:** Engineered features prioritizing transaction Category, geographical location and Temporal Density (Hour/Day), identifying late-night (22:00–03:00) as primary fraud signals.
+
+- **Agentic Reasoning & HITL:** Developed an asynchronous Human-In-The-Loop (HITL) workflow where the LLM agent analyzes suspicious patterns and pauses execution to request a manual verdict for high risk cases.
+
+- **Fast & Reliable Connection:**  Used FastAPI to build a quick connection between the math model and the AI agent. I also added a health check system that makes sure the server is fully awake and ready before sending any data, preventing errors or lost information.
 
 
 ## Tech Stack
 
-- **Python:** Core logic (refer to requirement.txt for the packages used in this project)
-- **FinBERT + ONNX Runtime:** Leveraged FinBERT (specialized BERT for finance) exported to ONNX format for high-speed sentiment inference on RSS and news data.
-- **Scikit-learn and XGBoost:** machine learning & evaluation
-- **Arch Library:** Used for GARCH(1,1) as the baseline and EGARCH-X for modelling with exogenous inputs
-- **NLP & APIs:** yfinance for market data; Bloomberg, cnbc, ft, and wall street journal, Google Trends for exogenous inputs
+- **Python**(refer to requirements.txt for the packages used in this project)
+- **Scikit-learn and XGBoost** (machine learning, classification, and feature importance evaluation)
+- **FastAPI** (high speed inference engine used to serve model predictions to the agentic layer)
+- **LangGraph and LangChain** (orchestration of agentic reasoning, state management, and HITL transitions)
+- **Groq** (LLM inference provider used for behavioral reasoning and investigation)
+
+## Quick Start
+
+Follow these steps to launch the API and run the agentic simulation on your local machine.
+
+---
+
+**1. Prerequisites**
+
+- Python 3.10+
+- Groq API Key: Get one at groq.com.
+- uv: Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux) or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+
+**2. Setup & Installation**
+Clone the repo and initialize the environment. uv will automatically read the pyproject.toml and create a virtual environment for you.
+
+**Bash**
+
+```bash
+git clone https://github.com/coder-red/live-fraud-detection-agent/
+
+# Add your API key to the environment
+echo "GROQ_API_KEY=your_key_here" > .env
+
+# Synchronize dependencies and create the virtual environment
+uv sync
+
+**3. Run the Simulation**
+Launch the unified orchestration script. This starts the FastAPI inference server, waits for the health check to pass, and begins the Agentic Simulation.
+
+
+
 
 
 
@@ -75,48 +110,44 @@ Feature importance.
 
 ![Bar Chart](assets/features.png)
 
-- ***Metrics used: rmse, mae, R²***
+- ***Key Metrics: F1-Score, Precision, Recall***
 
 
 ### Model Evaluation Strategy
 
-**Primary Metric: RMSE (Root Mean Squared Error)**
-Volatility forecasting requires precise predictions since small errors can compound in risk calculations.RMSE penalizes large forecast errors more heavily than MAE, making it best for identifying models that avoid dangerous outliers in volatility estimates.
+**Primary Metric: F1-Score**
+Fraud detection requires a balance between security and customer experience. Hence, the F1-Score is the primary metric used as it penalizes models that either miss too much fraud or annoy too many legitimate customers with false alarms. 
 
-
-**Supporting Metrics: MAE (Mean Absolute Error), R²**
-- **MAE** shows the model's average size of forecasting error.
-- **R²** indicates how much variation in volatility the model explains.
-
+**Supporting Metrics: Recall, Precision and Confusion matrix**
+- **Recall:** Measures the model's ability to capture as much fraud as possible.
+- **Precision:** Measures how often a flagged transaction is actually fraudulent.
+-**Confusion Matrix:** Used to visualize the trade offs between False Positives and False Negatives 
 
 ## Lessons Learned and Recommendations
 
 **What I found:**
 
-- **EGARCH-X vs. XGBoost Performance:** While XGBoost is better at capturing non-linearities, EGARCH-X performed better due to its assymetry modelling combined with reacting to exogenous sentiment
+- **Dual-Engine vs. Single Model Performance:** While XGBoost is efficient at scoring bulk transactions, adding the LangGraph AI agent was better for the grey area cases due to context aware reasoning.
 
-- **Walk-forward validation with XGBoost performed better:** I compared with standard xgboost and walk-forward validation performed better. This might be because retraining could have added more signal. SPY volatility dynamics were stable during the test period
+- **Mid Nights are High Risk** There was extreme concentration of fraudlent activity during late hours (22:00 - 03:00) across all days of the week. This made time of day one of the most important signals
 
-- **Historical volatility dominates prediction:** The 20-day rolling mean of absolute returns (`rolling_abs_return_mean_20d`) was by far the strongest predictor. This confirms volatility persistence.  This is because instead of looking at one noisy day’s move, it looks at the average size of moves over the last 20 days. This helps the model see how turbulent the market has been recently rather than reacting to a single spike.
+- **Weekends showed no value:** Interestingly, `is_weekend` had zero importance in the model's decision making process. The data indicates that fraud follows an hourly cycle rather than a day of the week cycle, which made specific time stamps more critical than the calendar day.
 
-- **ARCH-style features (abs_return, return_squared) underperformed expectations:** `return_squared` had zero importance in XGBoost. This is likely due to the presence of lagged volatility feature which makes it add little incremental information. The model already captures volatility dynamics through historical rolling volatility.
+- **The transaction category mattered most:** The merchant category was the strongest predictor of fraud, with `shopping_net`, `misc_net` and `grocery_pos` showing fraud rates significantly higher than the baseline average. This confirms that fraudsters tend to prioritize specific merchant types.
 
-- **Lagged returns showed limited value:** Lagged returns added very limited incremental value because the rolling volatility feature already captures past returns. Since `rolling_abs_return_mean_20d` is calculated from the last 20 days of returns, individual lagged returns become redundant.
 
 
 
 **Recommendation:**
-- Recommendation would be to regularly re train the model on new data and use a simple check to see if the market is in a calm or crazy period, then use settings that fit that period.
-
+- Recommendation would be to regularly retrain the model on updated transaction data to adapt to evolving fraud tactics.
 
 ## Limitation and What Can Be Improved
 **Limitation**
-- The model is mostly looking at what happened yesterday to predict today. If there is a major sudden market crash or spike, the model may be one day late to react because it hasn't seen the news/pattern yet.
+- The model relies heavily on historical risk levels for specific merchant categories. If a new category of merchant emerges or a fraudster switches to a previously safe category, the system may require a full retraining cycle to recognize the new pattern.
 
 
 **What Can Be Improved**
-- Dynamic Re-training: Implement an automated pipeline to regularly re-train the model on a sliding window.
-
+- Dynamic Re-training Pipeline: Implement an automated sliding-window pipeline to re-train the XGBoost model daily.This would allow the system to adapt to the phases where fraudster behaviors change 
 
 ## Repository structure
 
@@ -159,11 +190,19 @@ Live-Fraud-Agent/
 
 
 
+<details>
+  <summary><strong>Repository Structure (click to expand)</strong></summary>
+
+
+
+```text
+
+
 Transaction → API Call → AI Reasoning → Decision
                                             ↓
                                      Is it BLOCK?
                                      ↙          ↘
-                                  YES          NO
+                                  YES           NO
                                    ↓            ↓
-                            Ask Human      Auto-approve
-                            (HITL)            (Done)
+                             Ask Human        Auto-approve
+                               (HITL)            (Done)
