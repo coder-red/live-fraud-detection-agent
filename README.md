@@ -87,13 +87,14 @@ echo "GROQ_API_KEY=your_key_here" > .env
 
 # Synchronize dependencies and create the virtual environment
 uv sync
-
+```
 **3. Run the Simulation**
-Launch the unified orchestration script. This starts the FastAPI inference server, waits for the health check to pass, and begins the Agentic Simulation.
+Launch the orchestration script. This starts the FastAPI inference server, waits for the health check to pass, and begins the Agentic Simulation.
 
-
-
-
+```bash
+# Run the full pipeline
+uv run run_all.py
+```
 
 
 ## Quick glance at the results
