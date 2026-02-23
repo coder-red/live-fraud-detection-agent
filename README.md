@@ -196,7 +196,7 @@ Live-Fraud-Agent/
 
 ## Agentic Decision Pipeline
 <details>
-  <summary><strong>Agentic Decision Pipeline</strong></summary>
+  <summary><strong>Agentic Decision Pipeline (click to expand)</strong></summary>
 
 
 
