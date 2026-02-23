@@ -193,7 +193,7 @@ Live-Fraud-Agent/
 
 <details>
   <summary><strong>Repository Structure (click to expand)</strong></summary>
-
+```
 
 
 ```text
@@ -207,3 +207,4 @@ Transaction → API Call → AI Reasoning → Decision
                                    ↓            ↓
                              Ask Human        Auto-approve
                                (HITL)            (Done)
+```
