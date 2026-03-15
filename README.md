@@ -16,7 +16,7 @@
 
 # Key findings: 
 
-**Key findings: Transactions within high-risk categories such as online shopping and groceries, as well as those occurring during late-night hours (22:00–03:00), were significantly more likely to be fraudulent.**
+**Key findings: Transactions within high-risk categories such as online shopping and groceries, as well as those occurring during late-night hours (22:00–03:00) were significantly more likely to be fraudulent.**
 
 
 ## Author
