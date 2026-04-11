@@ -158,38 +158,39 @@ Fraud detection requires a balance between security and customer experience. Hen
 
 ```text
 
-Live-Fraud-Agent/
-├── README.md                    # Demo GIF + docker-compose up instructions
-├── requirements.txt
-├── .env.example
-├── docker-compose.yml          # API + DB one-command demo
-├── Dockerfile
-│
-├── app/                        # FastAPI production API
+.
+├── agents
+│   └── fraud_agents.py
+├── app
+│   ├── __init__.py
 │   ├── main.py
 │   └── routes.py
-│
-├── agents/                     # RAG agentic fraud reasoning
-│   ├── fraud_agent.py         # LLM decision layer
-│   ├── prompts.py
-│   └── tools.py
-│
-├── src/                        # ML pipeline
-│   ├── inference.py           # XGBoost 
-│   ├── features.py
-│   └── data.py
-│
-├── notebooks/                  # Proof of work
+├── assets
+│   ├── confusion.png
+│   ├── features.png
+│   ├── FRAUD.png
+│   └── target.png
+├── data
+│   ├── fraudTest.csv
+│   └── fraudTrain.csv
+├── model
+│   ├── feature_list.pkl
+│   └── fraud_model.json
+├── notebooks
 │   ├── 01_eda.ipynb
 │   └── 02_training.ipynb
-│
-├── tests/                      # Production reliability
-│   └── test_end_to_end.py
-├── data/                       # Sample transactions
-│   └── sample_fraud.csv
-└── models/
-    └── xgboost_fraud.pkl
-
+├── src
+│   ├── __init__.py
+│   ├── features.py
+│   └── inference.py
+├── .env
+├── .gitignore
+├── config.py
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+├── run_all.py
+└── uv.lock
 ```
 
 </details>
