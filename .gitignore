@@ -8,6 +8,10 @@ wheels/
 data/
 
 .env
+.env.*
+!.env.example
 
 # Virtual environments
 .venv
+postgres_data/
+pgdata/

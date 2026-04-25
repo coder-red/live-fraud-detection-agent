@@ -1,0 +1,29 @@
+# Secrets and local env
+.env
+.env.*
+
+# Git metadata
+.git
+
+# Python caches and virtual environments
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local tooling and OS clutter
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Large local-only project assets not needed in the image
+data/
+notebooks/
+
+# Local database files or exports
+postgres_data/
+pgdata/
+*.sqlitedb

@@ -12,3 +12,4 @@ langchain_groq
 langgraph
 requests
 python-dotenv
+psycopg[binary]

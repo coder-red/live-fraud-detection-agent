@@ -42,5 +42,5 @@ async def predict_fraud(data: Transaction):
         transaction_dict = data.model_dump()
         result = engine.predict(transaction_dict)
         return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Prediction failed")

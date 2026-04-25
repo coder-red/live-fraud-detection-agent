@@ -2,9 +2,7 @@
   <img src="assets/FRAUD.png" alt="Project Banner" width="100%">
 </p>
 
-![Python version](https://img.shields.io/badge/Python%20version-3.10%2B-lightgrey)
-![GitHub repo size](https://img.shields.io/github/repo-size/coder-red/Financial-volatility-forecasting)
-![GitHub last commit](https://img.shields.io/github/last-commit/coder-red/Financial-volatility-forecasting)
+![Python version](https://img.shields.io/badge/Python%20version-3.11%2B-lightgrey)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat&logo=scikitlearn&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=chainlink&logoColor=white)
@@ -71,30 +69,49 @@ Follow these steps to launch the API and run the agentic simulation on your loca
 
 **1. Prerequisites**
 
-- Python 3.10+
+- Python 3.11+
 - Groq API Key: Get one at groq.com.
 - uv: Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux) or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
 
 **2. Setup & Installation**
-Clone the repo and initialize the environment. uv will automatically read the pyproject.toml and create a virtual environment for you.
+Clone the repo and initialize the environment. Copy the example environment file first so your local secrets stay out of Git.
 
 **Bash**
 
 ```bash
 git clone https://github.com/coder-red/live-fraud-detection-agent/
 
-# Add your API key to the environment
-echo "GROQ_API_KEY=your_key_here" > .env
+# Copy the sample environment and fill in your real values
+cp .env.example .env
 
 # Synchronize dependencies and create the virtual environment
 uv sync
 ```
+If you're on Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
 **3. Run the Simulation**
 Launch the orchestration script. This starts the FastAPI inference server, waits for the health check to pass, and begins the Agentic Simulation.
 
 ```bash
 # Run the full pipeline
 uv run run_all.py
+```
+
+**4. Run the Docker Stack**
+The default Compose stack starts `api`, `postgres`, and `redis`. 
+
+```bash
+docker compose up --build
+```
+
+To start pgAdmin too:
+
+```bash
+docker compose --profile devtools up --build
 ```
 
 
