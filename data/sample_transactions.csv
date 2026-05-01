@@ -1,0 +1,7 @@
+trans_date_trans_time,amt,category,merchant,lat,long,merch_lat,merch_long,city,state,city_pop,dob,gender,job
+2019-01-01 03:15:00,950.00,shopping_net,fraud-merchant-xyz,40.7128,-74.0060,34.0522,-118.2437,New York,NY,8336817,1990-01-01,M,Engineer
+2019-01-02 14:20:00,34.12,gas_transport,legit-fuel-stop,33.4484,-112.0740,33.4490,-112.0710,Phoenix,AZ,1680992,1982-07-14,F,Teacher
+2019-01-03 23:45:00,1250.75,misc_net,late-night-market,41.8781,-87.6298,41.8810,-87.6200,Chicago,IL,2693976,1975-04-03,M,Manager
+2019-01-04 09:10:00,18.99,grocery_pos,neighborhood-grocery,29.7604,-95.3698,29.7610,-95.3702,Houston,TX,2320268,1995-11-21,F,Nurse
+2019-01-05 02:30:00,640.00,shopping_net,electronics-online,39.7392,-104.9903,39.5000,-105.2000,Denver,CO,715522,1988-09-09,M,Developer
+2019-01-06 16:05:00,72.40,food_dining,local-restaurant,47.6062,-122.3321,47.6070,-122.3330,Seattle,WA,737015,1969-06-18,F,Designer

@@ -2,7 +2,6 @@ import subprocess
 import time
 import requests
 import pandas as pd
-import sys
 import random
 from pathlib import Path
 from agents.fraud_agents import HITLFraudAgent
@@ -36,23 +35,28 @@ def wait_for_api(url: str, timeout: int = 30):
 
 def run_simulation(total_samples: int = 500):
     """Run a randomized simulation and track performance stats."""
-    api_url = "http://127.0.0.1:8000/predict"
+    api_url = "http://127.0.0.1:8000/api/v1/predict"
     agent = HITLFraudAgent(api_url=api_url)
-    data_path = Path("data/fraudTest.csv")
+    full_data_path = Path("data/fraudTest.csv")
+    sample_data_path = Path("data/sample_transactions.csv")
+    data_path = full_data_path if full_data_path.exists() else sample_data_path
     
     if not data_path.exists():
-        print(f" Error: {data_path} not found!")
+        print(" Error: no transaction data found. Add data/fraudTest.csv or use data/sample_transactions.csv.")
         return
 
     # Statistics Tracker
     stats = {"total": 0, "flagged": 0, "human": 0, "approved": 0}
 
-    # Random Sampling: Skip a random amount to get fresh data each time
-    random_skip = random.randint(1, 556000) 
-    print(f" Sampling {total_samples} random transactions (Starting row: {random_skip})...")
-    
-    # Read the random chunk
-    df = pd.read_csv(data_path, skiprows=range(1, random_skip), nrows=total_samples)
+    if data_path == full_data_path:
+        # Use a random row window for the large Kaggle test file so repeated demos vary.
+        random_skip = random.randint(1, 556000)
+        print(f" Sampling {total_samples} random transactions (Starting row: {random_skip})...")
+        df = pd.read_csv(data_path, skiprows=range(1, random_skip), nrows=total_samples)
+    else:
+        # The committed sample keeps the repo runnable immediately after clone.
+        print(f" Sampling up to {total_samples} transactions from {data_path}...")
+        df = pd.read_csv(data_path).head(total_samples)
     
     print("-" * 50)
 
@@ -61,15 +65,17 @@ def run_simulation(total_samples: int = 500):
         result = agent.run_on_transaction(tx)
         stats["total"] += 1
         
-        action = result.get('action')
+        api_response = result.get("api_response", {})
+        action = result.get("action") or api_response.get("decision")
         
         # Log the outcomes
-        if action == "BLOCK":
-            stats["flagged"] += 1
-            print(f" [Row {idx}] AI BLOCKED: {result.get('reasoning')[:60]}...")
-        elif "human_verdict" in result:
+        if result.get("human_verdict") == "PENDING_REVIEW":
             stats["human"] += 1
-            print(f" [Row {idx}] HUMAN REVIEW: {result.get('human_verdict')}")
+            print(f" [Row {idx}] HUMAN REVIEW QUEUED: {result.get('case_id')}")
+        elif action in {"BLOCK", "REVIEW"}:
+            stats["flagged"] += 1
+            reasoning = result.get("reasoning") or api_response.get("agent_summary", "")
+            print(f" [Row {idx}] {action}: {reasoning[:60]}...")
         else:
             stats["approved"] += 1
             # Quietly print a dot for every 10 approvals to show progress
@@ -92,7 +98,7 @@ if __name__ == "__main__":
     api_process = None
     try:
         api_process = start_api()
-        if wait_for_api("http://127.0.0.1:8000/predict"):
+        if wait_for_api("http://127.0.0.1:8000/api/v1/predict"):
             # Change this number to 500 for your final run
             run_simulation(total_samples=30) 
         else:

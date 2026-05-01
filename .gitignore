@@ -5,7 +5,8 @@ build/
 dist/
 wheels/
 *.egg-info
-data/
+data/*
+!data/sample_transactions.csv
 
 .env
 .env.*

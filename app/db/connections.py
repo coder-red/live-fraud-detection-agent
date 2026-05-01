@@ -1,12 +1,11 @@
 import os
-from collections.abc import Generator # Generator is used for type hinting the get_db function, which yields a database session
+from collections.abc import Generator
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine # create_engine is used to create a SQLAlchemy engine that will manage our database connections
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-# DeclarativeBase is the base class for our ORM models
-# A session is a temporary conversation between your Python code and the db — it holds your changes in memory until you tell it to commit, then sends them all to the database at once.(like git)
-# sessionmaker is a factory for creating new Session instances
+# a session is the main way to interact with the database. It manages connections and transactions.
+
 load_dotenv()
 
 
@@ -17,30 +16,29 @@ if not DATABASE_URL:
 
 engine = create_engine(
     DATABASE_URL,
-    future=True, # future=True enables SQLAlchemy 2.0 style usage, which is more explicit and has better performance
-    pool_pre_ping=True, # pool_pre_ping=True ensures that the connection is alive before using it, which helps prevent errors due to stale connections
+    future=True,
+    pool_pre_ping=True,
 )
 
-# Create a configured "Session" class
+# SessionLocal creates one DB session per request or task.
+# A session is the object you use to read, add, update, and commit rows like git
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
-# create a base class for our ORM models to inherit from
-# # Base is the shared registry for our ORM models
+
 class Base(DeclarativeBase):
     pass
 
-# Create the database tables based on the models defined in app.db.models 
+
 def init_db() -> None:
-    # Import models here so SQLAlchemy registers them before create_all runs.
-    from app.db import models
-    # create_all will create the tables in the database based on the models defined in app.db.models. 
-    # It checks if the tables already exist and only creates them if they don't, so it's safe to run multiple times without losing data.
+    # Import models so SQLAlchemy knows which tables exist.
+    from app.db import models  # noqa: F401
+
+    # create_all creates missing tables; it does not delete existing data.
     Base.metadata.create_all(bind=engine)
 
 
 def get_db() -> Generator[Session, None, None]:
-    
-    
+    # Yield one session, then close it after the request finishes.
     db = SessionLocal()
     try:
         yield db
