@@ -99,7 +99,7 @@ if __name__ == "__main__":
     try:
         api_process = start_api()
         if wait_for_api("http://127.0.0.1:8000/api/v1/predict"):
-            # Change this number to 500 for your final run
+            # Change this number to 500 for final run
             run_simulation(total_samples=30) 
         else:
             print(" API failed to start.")

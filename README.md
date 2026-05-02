@@ -33,6 +33,7 @@
   - [Limitation and what can be improved](#limitation-and-what-can-be-improved)
   - [Repository structure](#repository-structure)
   - [Agentic Decision Pipeline](#agentic-decision-pipeline)
+  - [Additional Docs](#additional-docs)
 
 
 ## Business context
@@ -112,6 +113,14 @@ To start pgAdmin too:
 
 ```bash
 docker compose --profile devtools up --build
+```
+
+**5. Run Tests**
+Install the development requirements, then run the pytest suite.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
 
 
@@ -230,3 +239,10 @@ Transaction → API Call → AI Reasoning → Decision
                              Ask Human        Auto-approve
                                (HITL)            (Done)
 ```
+
+</details>
+
+## Additional Docs
+
+- [API Reference](docs/API.md)
+- [Roadmap](docs/ROADMAP.md)

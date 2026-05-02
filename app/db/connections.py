@@ -24,7 +24,7 @@ engine = create_engine(
 # A session is the object you use to read, add, update, and commit rows like git
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
-
+# base is the parent class for all our models. It contains the metadata and other info about the database schema.
 class Base(DeclarativeBase):
     pass
 
