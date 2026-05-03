@@ -18,6 +18,9 @@ def classify_risk(probability: float) -> PolicyDecision:
     Keeping this deterministic makes decisions explainable and easy to tune
     without retraining the model.
     """
+    if not 0 <= probability <= 1:
+        raise ValueError("probability must be between 0 and 1")
+
     if probability >= 0.90:
         return {
             "risk_band": "CRITICAL",

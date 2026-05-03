@@ -2,10 +2,10 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 project_root = Path(__file__).parent.parent
@@ -14,7 +14,6 @@ sys.path.insert(0, str(project_root))
 from app.db.connections import get_db
 from app.db.models import FraudCase, FraudPrediction
 from src.agent_review import generate_agent_review
-from src.inference import FraudInference
 from src.policy import classify_risk
 
 
@@ -23,7 +22,7 @@ router = APIRouter()
 # this defines the request body so when someone calls POST /predict, FastAPI reads the JSON body and turns it into a Transaction object.
 class Transaction(BaseModel):
     trans_date_trans_time: str
-    amt: float
+    amt: float = Field(gt=0)
     category: str
     merchant: str
     lat: float
@@ -85,11 +84,21 @@ class HumanDecisionRequest(BaseModel):
     note: str | None = None
 
 
-base_path = Path(__file__).parent.parent / "model"
-engine = FraudInference(
-    model_path=str(base_path / "fraud_model.json"),
-    feature_list_path=str(base_path / "feature_list.pkl"),
-)
+_engine: Any | None = None
+
+
+def get_inference_engine() -> Any:
+    """Load the model lazily so tests and app startup can override it cleanly."""
+    global _engine
+    if _engine is None:
+        from src.inference import FraudInference
+
+        base_path = Path(__file__).parent.parent / "model"
+        _engine = FraudInference(
+            model_path=str(base_path / "fraud_model.json"),
+            feature_list_path=str(base_path / "feature_list.pkl"),
+        )
+    return _engine
 
 # this function converts the ISO datetime string from the request into a Python datetime object that we can save in Postgres. FastAPI doesn't do this automatically because the input is a string, not a datetime, but our DB model expects a datetime.
 def _parse_datetime(value: str) -> datetime:
@@ -121,10 +130,14 @@ def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) 
 
 # router.post tells FastAPI: “the function below handles POST requests to /predict”, while response_model=PredictionRecord tells FastAPI how to shape the output
 @router.post("/predict", response_model=PredictionRecord)
-async def predict_fraud(data: Transaction, db: Session = Depends(get_db)):
+async def predict_fraud(
+    data: Transaction,
+    db: Session = Depends(get_db),
+    inference: Any = Depends(get_inference_engine),
+):
     try:
         transaction_dict = data.model_dump()
-        result = engine.predict(transaction_dict)
+        result = inference.predict(transaction_dict)
         policy = classify_risk(result["probability"])
 
         # Build one DB row from the input transaction plus model output.

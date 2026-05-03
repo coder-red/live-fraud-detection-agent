@@ -119,8 +119,8 @@ docker compose --profile devtools up --build
 Install the development requirements, then run the pytest suite.
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+uv pip install -r requirements-dev.txt
+uv run pytest
 ```
 
 
