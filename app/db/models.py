@@ -35,6 +35,8 @@ class FraudPrediction(Base):
     agent_action: Mapped[str | None] = mapped_column(String(32), nullable=True)
     human_verdict: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Stable hash of request fields so repeat POSTs (e.g. Streamlit re-run) do not duplicate rows.
+    input_fingerprint: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

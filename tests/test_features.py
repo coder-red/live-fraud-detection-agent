@@ -4,7 +4,7 @@ import pandas as pd
 from src.features import preprocess_features 
 
 
-def test_preprocess_features_builds_model_columns():  
+def test_preprocess_features_builds_model_columns():  # NORMAL CASE: standard clean input
     raw = pd.DataFrame(
         [
             {
@@ -25,7 +25,7 @@ def test_preprocess_features_builds_model_columns():
 
     features = preprocess_features(raw) 
 
-    assert list(features.columns) == [  # The output columns must be exactly what the model expects.
+    assert list(features.columns) == [
         "amt",
         "city_pop",
         "dist_to_merchant",
@@ -37,15 +37,16 @@ def test_preprocess_features_builds_model_columns():
         "gender",
         "state",
     ]
-    row = features.iloc[0]  # This selects the first processed row.
-    assert row["hour"] == 23  # The hour should be taken from the transaction time.
-    assert row["day_of_week"] == 5  # May 2, 2026 is a Saturday, so pandas returns 5.
-    assert row["is_weekend"] == 1  # Saturday should be marked as weekend.
-    assert row["age"] == 30  # The customer should be 30 on this transaction date.
-    assert row["dist_to_merchant"] == 0  # Same customer and merchant location should give zero distance.
-    assert str(features["category"].dtype) == "category"  # XGBoost expects this column as a categorical type.
+    row = features.iloc[0]
+    assert row["hour"] == 23
+    assert row["day_of_week"] == 5
+    assert row["is_weekend"] == 1
+    assert row["age"] == 30
+    assert row["dist_to_merchant"] == 0
+    assert str(features["category"].dtype) == "category"
 
-def test_preprocess_features_for_agent_returns_human_readable_columns():  # This checks the agent-facing output.
+
+def test_preprocess_features_for_agent_returns_human_readable_columns():  #  NORMAL CASE: agent view output
     raw = pd.DataFrame(
         [
             {
@@ -66,9 +67,9 @@ def test_preprocess_features_for_agent_returns_human_readable_columns():  # This
         ]
     )
 
-    features = preprocess_features(raw, for_agent=True)  # This runs the agent version of the feature code.
+    features = preprocess_features(raw, for_agent=True)
 
-    assert list(features.columns) == [  # The agent output should use readable columns.
+    assert list(features.columns) == [
         "category",
         "amt",
         "job",
@@ -79,11 +80,11 @@ def test_preprocess_features_for_agent_returns_human_readable_columns():  # This
         "city",
         "state",
     ]
-    assert features.iloc[0]["hour"] == 3  # The hour should be taken from the transaction time.
-    assert features.iloc[0]["dist_to_merchant"] > 0  # New York and Los Angeles should not be zero distance apart.
+    assert features.iloc[0]["hour"] == 3
+    assert features.iloc[0]["dist_to_merchant"] > 0
 
 
-def test_preprocess_features_marks_sunday_as_weekend():  # EDGE CASE: this checks the other weekend day, not just Saturday.
+def test_preprocess_features_marks_sunday_as_weekend():  # EDGE CASE: boundary day (Sunday vs Saturday logic check)
     raw = pd.DataFrame(
         [
             {
@@ -102,13 +103,13 @@ def test_preprocess_features_marks_sunday_as_weekend():  # EDGE CASE: this check
         ]
     )
 
-    features = preprocess_features(raw)  # This runs the normal model feature code.
+    features = preprocess_features(raw)
 
-    assert features.iloc[0]["day_of_week"] == 6  # May 3, 2026 is a Sunday, so pandas returns 6.
-    assert features.iloc[0]["is_weekend"] == 1  # Sunday should be marked as weekend.
+    assert features.iloc[0]["day_of_week"] == 6
+    assert features.iloc[0]["is_weekend"] == 1
 
 
-def test_preprocess_features_rejects_bad_datetime():  # INVALID CASE: datetime text must be parseable by pandas.
+def test_preprocess_features_rejects_bad_datetime():  #  INVALID CASE: broken input format
     raw = pd.DataFrame(
         [
             {
@@ -127,5 +128,5 @@ def test_preprocess_features_rejects_bad_datetime():  # INVALID CASE: datetime t
         ]
     )
 
-    with pytest.raises(ValueError):  # Pandas should raise because "not-a-date" is not a real datetime.
-        preprocess_features(raw)  # This sends the invalid datetime into feature engineering.
+    with pytest.raises(ValueError):
+        preprocess_features(raw)

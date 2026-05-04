@@ -1,7 +1,51 @@
-trans_date_trans_time,amt,category,merchant,lat,long,merch_lat,merch_long,city,state,city_pop,dob,gender,job
-2019-01-01 03:15:00,950.00,shopping_net,fraud-merchant-xyz,40.7128,-74.0060,34.0522,-118.2437,New York,NY,8336817,1990-01-01,M,Engineer
-2019-01-02 14:20:00,34.12,gas_transport,legit-fuel-stop,33.4484,-112.0740,33.4490,-112.0710,Phoenix,AZ,1680992,1982-07-14,F,Teacher
-2019-01-03 23:45:00,1250.75,misc_net,late-night-market,41.8781,-87.6298,41.8810,-87.6200,Chicago,IL,2693976,1975-04-03,M,Manager
-2019-01-04 09:10:00,18.99,grocery_pos,neighborhood-grocery,29.7604,-95.3698,29.7610,-95.3702,Houston,TX,2320268,1995-11-21,F,Nurse
-2019-01-05 02:30:00,640.00,shopping_net,electronics-online,39.7392,-104.9903,39.5000,-105.2000,Denver,CO,715522,1988-09-09,M,Developer
-2019-01-06 16:05:00,72.40,food_dining,local-restaurant,47.6062,-122.3321,47.6070,-122.3330,Seattle,WA,737015,1969-06-18,F,Designer
+trans_date_trans_time,amt,category,merchant,lat,long,merch_lat,merch_long,city,state,city_pop,dob,gender,job,is_fraud
+2019-01-01 09:12:00,18.50,gas_transport,fuel-stop-12,33.4484,-112.0740,33.4489,-112.0735,Phoenix,AZ,1680992,1982-07-14,F,Teacher,0
+2019-01-02 11:30:00,42.20,grocery_pos,daily-grocer-01,29.7604,-95.3698,29.7608,-95.3700,Houston,TX,2320268,1991-03-22,M,Accountant,0
+2019-01-03 14:45:00,7.90,food_dining,cafe-uptown,41.8781,-87.6298,41.8785,-87.6295,Chicago,IL,2693976,1975-11-02,F,Designer,0
+2019-01-04 10:05:00,3.25,pharmacy,metro-rx,47.6062,-122.3321,47.6065,-122.3318,Seattle,WA,737015,1988-01-19,M,Engineer,0
+2019-01-05 16:20:00,64.00,health_fitness,fit-gym,39.7392,-104.9903,39.7396,-104.9900,Denver,CO,715522,1994-05-10,F,Nurse,0
+2019-01-06 08:55:00,22.10,gas_transport,quick-mart-77,25.7617,-80.1918,25.7620,-80.1915,Miami,FL,454279,1970-09-30,M,Manager,0
+2019-01-07 13:40:00,51.75,grocery_pos,organic-co-op,45.5152,-122.6784,45.5156,-122.6780,Portland,OR,652503,1983-12-05,F,Teacher,0
+2019-01-08 12:15:00,9.99,personal_care,soap aisle-04,30.2672,-97.7431,30.2676,-97.7428,Austin,TX,978908,1996-08-14,F,Developer,0
+2019-01-09 17:50:00,31.40,food_dining,taco-truck-09,42.3601,-71.0589,42.3604,-71.0586,Boston,MA,675647,1989-02-27,M,Engineer,0
+2019-01-10 15:05:00,88.60,grocery_pos,supermarket-bay,32.7157,-117.1611,32.7160,-117.1608,San Diego,CA,1386932,1977-06-11,M,Consultant,0
+2019-01-11 07:25:00,14.30,gas_transport,pump-03,33.4484,-112.0740,33.4488,-112.0738,Phoenix,AZ,1680992,1992-10-03,F,Accountant,0
+2019-01-12 18:10:00,27.55,food_dining,diner-main,29.7604,-95.3698,29.7609,-95.3696,Houston,TX,2320268,1985-04-16,M,Designer,0
+2019-01-13 11:50:00,6.40,pharmacy,cvs-corner,41.8781,-87.6298,41.8783,-87.6296,Chicago,IL,2693976,1999-01-08,F,Student,0
+2019-01-14 09:35:00,59.90,health_fitness,sports-shop,47.6062,-122.3321,47.6064,-122.3319,Seattle,WA,737015,1973-12-21,M,Engineer,0
+2019-01-15 12:00:00,13.75,grocery_pos,bakery-goods,39.7392,-104.9903,39.7394,-104.9901,Denver,CO,715522,1990-07-30,F,Nurse,0
+2019-01-16 19:45:00,4.50,gas_transport,night-stop-01,25.7617,-80.1918,25.7619,-80.1916,Miami,FL,454279,1981-11-14,M,Teacher,0
+2019-01-17 10:20:00,36.00,food_dining,soup-salad,45.5152,-122.6784,45.5154,-122.6782,Portland,OR,652503,1987-03-09,F,Manager,0
+2019-01-18 08:40:00,11.20,personal_care,hygiene-aisle,30.2672,-97.7431,30.2674,-97.7429,Austin,TX,978908,1995-05-25,M,Developer,0
+2019-01-19 14:55:00,73.15,grocery_pos,warehouse-club,42.3601,-71.0589,42.3603,-71.0587,Boston,MA,675647,1978-09-01,F,Accountant,0
+2019-01-20 16:30:00,19.99,gas_transport,express-fuel,32.7157,-117.1611,32.7159,-117.1609,San Diego,CA,1386932,1993-02-14,M,Engineer,0
+2019-01-21 12:25:00,45.60,food_dining,burger-joint,33.4484,-112.0740,33.4486,-112.0739,Phoenix,AZ,1680992,1984-08-07,F,Designer,0
+2019-01-22 09:50:00,8.75,pharmacy,wellness-rx,29.7604,-95.3698,29.7606,-95.3697,Houston,TX,2320268,1991-12-18,M,Nurse,0
+2019-01-23 13:15:00,56.30,grocery_pos,produce-mkt,41.8781,-87.6298,41.8782,-87.6297,Chicago,IL,2693976,1976-04-29,F,Teacher,0
+2019-01-24 17:05:00,24.90,health_fitness,yoga-studio,47.6062,-122.3321,47.6063,-122.3320,Seattle,WA,737015,1989-10-12,F,Consultant,0
+2019-01-25 10:45:00,5.60,gas_transport,corner-pump,39.7392,-104.9903,39.7393,-104.9902,Denver,CO,715522,1997-06-03,M,Student,0
+2019-01-26 15:30:00,67.80,grocery_pos,sushi-run,25.7617,-80.1918,25.7618,-80.1917,Miami,FL,454279,1980-01-22,F,Manager,0
+2019-01-27 11:10:00,12.40,food_dining,sandwich-shop,45.5152,-122.6784,45.5153,-122.6783,Portland,OR,652503,1994-09-16,M,Engineer,0
+2019-01-28 08:15:00,38.90,grocery_pos,morning-mart,30.2672,-97.7431,30.2673,-97.7430,Austin,TX,978908,1986-05-08,F,Accountant,0
+2019-01-29 14:00:00,29.25,gas_transport,midday-fill,42.3601,-71.0589,42.3602,-71.0588,Boston,MA,675647,1992-11-30,M,Developer,0
+2019-01-30 18:40:00,15.80,personal_care,beauty-bar,32.7157,-117.1611,32.7158,-117.1610,San Diego,CA,1386932,1979-07-04,F,Designer,0
+2019-02-01 23:18:00,6840.50,shopping_net,fraud-store-net,33.4484,-112.0740,40.7128,-118.2437,Phoenix,AZ,1680992,1988-03-15,M,Consultant,1
+2019-02-02 02:05:00,925.75,misc_net,ghost-checkout-co,29.7604,-95.3698,34.0522,-118.2437,Houston,TX,2320268,1990-11-02,F,Self-employed,1
+2019-02-03 01:40:00,5120.00,shopping_pos,flash-deal-999,41.8781,-87.6298,51.5074,-0.1278,Chicago,IL,2693976,1985-06-21,M,Engineer,1
+2019-02-04 22:55:00,780.25,misc_pos,crypto-gift-cards,47.6062,-122.3321,55.7558,-37.6173,Seattle,WA,737015,1992-01-09,F,Consultant,1
+2019-02-05 23:50:00,9100.99,shopping_net,fraud-store-net,39.7392,-104.9903,48.8566,2.3522,Denver,CO,715522,1987-08-30,M,Manager,1
+2019-02-06 00:35:00,1433.60,misc_net,ghost-checkout-co,25.7617,-80.1918,35.6895,139.6917,Miami,FL,454279,1991-04-14,F,Engineer,1
+2019-02-07 03:12:00,2899.00,shopping_pos,flash-deal-999,45.5152,-122.6784,59.9343,30.3351,Portland,OR,652503,1983-12-01,M,Self-employed,1
+2019-02-08 22:10:00,640.40,misc_pos,crypto-gift-cards,30.2672,-97.7431,19.4326,-99.1332,Austin,TX,978908,1995-09-27,F,Consultant,1
+2019-02-09 01:28:00,7755.00,shopping_net,fraud-store-net,42.3601,-71.0589,52.5200,13.4050,Boston,MA,675647,1989-02-03,M,Engineer,1
+2019-02-10 23:45:00,990.10,misc_net,ghost-checkout-co,32.7157,-117.1611,37.7749,-122.4194,San Diego,CA,1386932,1993-07-19,F,Manager,1
+2019-02-11 02:20:00,4200.75,shopping_pos,flash-deal-999,33.4484,-112.0740,-33.8688,151.2093,Phoenix,AZ,1680992,1986-10-11,M,Self-employed,1
+2019-02-12 00:55:00,3333.33,misc_pos,crypto-gift-cards,29.7604,-95.3698,1.3521,103.8198,Houston,TX,2320268,1994-05-06,F,Consultant,1
+2019-02-13 03:44:00,8800.00,shopping_net,fraud-store-net,41.8781,-87.6298,-23.5505,-46.6333,Chicago,IL,2693976,1981-01-27,M,Engineer,1
+2019-02-14 22:33:00,1250.00,misc_net,ghost-checkout-co,47.6062,-122.3321,47.3769,8.5417,Seattle,WA,737015,1990-12-12,F,Engineer,1
+2019-02-15 01:05:00,5600.50,shopping_pos,flash-deal-999,39.7392,-104.9903,-34.6037,-58.3816,Denver,CO,715522,1984-03-03,M,Consultant,1
+2019-02-16 23:22:00,720.90,misc_pos,crypto-gift-cards,25.7617,-80.1918,28.6139,77.2090,Miami,FL,454279,1992-08-25,F,Self-employed,1
+2019-02-17 02:48:00,9555.15,shopping_net,fraud-store-net,45.5152,-122.6784,35.6762,139.6503,Portland,OR,652503,1988-06-17,M,Manager,1
+2019-02-18 00:18:00,1888.88,misc_net,ghost-checkout-co,30.2672,-97.7431,39.9042,116.4074,Austin,TX,978908,1996-02-08,F,Engineer,1
+2019-02-19 03:15:00,410.25,misc_pos,crypto-gift-cards,42.3601,-71.0589,-22.9068,-43.1729,Boston,MA,675647,1991-11-21,M,Consultant,1
+2019-02-20 22:48:00,6700.00,shopping_pos,flash-deal-999,32.7157,-117.1611,13.7563,100.5018,San Diego,CA,1386932,1987-04-02,F,Self-employed,1

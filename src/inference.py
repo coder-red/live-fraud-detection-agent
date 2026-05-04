@@ -4,6 +4,7 @@ import joblib
 from pathlib import Path
 from src.features import preprocess_features
 
+# inference is used to run the model and get predictions. It loads the model, preprocesses the input, and returns the fraud probability and decision. This is separate from the API code to keep concerns separated and make it easier to test the inference logic in isolation.
 class FraudInference:
     def __init__(self, model_path: str, feature_list_path: str, threshold: float = 0.5221):
         # 1. Initialize the wrapper

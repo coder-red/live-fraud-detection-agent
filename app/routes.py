@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 import uuid
 from datetime import datetime
@@ -6,6 +8,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 project_root = Path(__file__).parent.parent
@@ -105,6 +108,28 @@ def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _input_fingerprint(data: Transaction) -> str:
+    """Canonical hash of inbound transaction fields (idempotency / dedupe)."""
+    d = data.model_dump()
+    for key in ("amt", "lat", "long", "merch_lat", "merch_long"):
+        d[key] = round(float(d[key]), 6)
+    d["city_pop"] = int(d["city_pop"])
+    for key in ("trans_date_trans_time", "category", "merchant", "city", "state", "dob", "gender", "job"):
+        d[key] = str(d[key]).strip()
+    ordered = {k: d[k] for k in sorted(d)}
+    blob = json.dumps(ordered, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _latest_case_for_prediction(db: Session, prediction_id: int) -> FraudCase | None:
+    return (
+        db.query(FraudCase)
+        .filter(FraudCase.prediction_id == prediction_id)
+        .order_by(FraudCase.created_at.desc())
+        .first()
+    )
+
+
 def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) -> dict:
     """Build an API response that includes case metadata when it exists."""
     return {
@@ -136,6 +161,15 @@ async def predict_fraud(
     inference: Any = Depends(get_inference_engine),
 ):
     try:
+        fingerprint = _input_fingerprint(data)
+        existing = (
+            db.query(FraudPrediction)
+            .filter(FraudPrediction.input_fingerprint == fingerprint)
+            .one_or_none()
+        )
+        if existing is not None:
+            return _prediction_payload(existing, _latest_case_for_prediction(db, existing.id))
+
         transaction_dict = data.model_dump()
         result = inference.predict(transaction_dict)
         policy = classify_risk(result["probability"])
@@ -162,11 +196,21 @@ async def predict_fraud(
             risk_band=policy["risk_band"],
             decision=policy["decision"],
             requires_review=policy["requires_review"],
+            input_fingerprint=fingerprint,
         )
 
         # Commit the prediction first so the review case can reference its ID.
         db.add(record)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            winner = (
+                db.query(FraudPrediction)
+                .filter(FraudPrediction.input_fingerprint == fingerprint)
+                .one()
+            )
+            return _prediction_payload(winner, _latest_case_for_prediction(db, winner.id))
         db.refresh(record)
 
         case = None
