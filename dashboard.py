@@ -63,13 +63,10 @@ def post_predict(payload: dict) -> tuple[bool, object, float]:
         return False, str(exc), 0.0
 
 def _project_root() -> Path:
-    # Try script-relative first, fall back to cwd
     script_dir = Path(__file__).resolve().parent
     if (script_dir / "data" / "sample_transactions.csv").exists():
         return script_dir
     return Path.cwd()
-
-st.write(f"DEBUG: looking for CSV at `{csv_path}`")
 
 def _csv_row_to_payload(row: dict) -> dict:
     out: dict = {}
@@ -88,13 +85,13 @@ def _csv_row_to_payload(row: dict) -> dict:
 
 def load_all_sample_transactions() -> list[dict]:
     csv_path = _project_root() / "data" / "sample_transactions.csv"
+    st.write(f"DEBUG: looking for CSV at `{csv_path}`")
     if not csv_path.exists():
         return []
     df = pd.read_csv(csv_path)
     return [_csv_row_to_payload(row.to_dict()) for _, row in df.iterrows()]
 
 # --- Cached data fetchers ---
-# TTL=15s: fast for demo, fresh enough after decisions
 
 @st.cache_data(ttl=15)
 def get_pending():
@@ -112,7 +109,7 @@ def get_health():
     except requests.RequestException:
         return None
 
-# --- Connection check (cached, doesn't re-hit on every rerun) ---
+# --- Connection check ---
 
 health = get_health()
 if not health:
@@ -194,12 +191,11 @@ if st.button("▶  Score all transactions", key="run_simulation"):
             "avg_lat":  avg_lat,
             "total_ms": sum(latencies),
         }
-        # Invalidate queue cache so new cases appear immediately
         get_pending.clear()
         get_predictions.clear()
         st.rerun()
 
-# Render simulation results if they exist (persists across reruns)
+# Render simulation results
 if "sim_results" in st.session_state:
     r = st.session_state["sim_results"]
     df = r["df"]
