@@ -20,7 +20,6 @@ env/
 .ipynb_checkpoints/
 
 # Large local-only project assets not needed in the image
-data/
 notebooks/
 
 # Local database files or exports
