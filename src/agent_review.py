@@ -20,7 +20,6 @@ class AgentReview(BaseModel):
 
 @lru_cache(maxsize=1)
 def _get_llm() -> ChatGroq:
-    print("🔥 USING LLM: llama-3.3-70b-versatile")
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
 
 
@@ -42,7 +41,6 @@ def _reason_codes(transaction: dict, probability: float, risk_band: str) -> list
 
 
 def _fallback_review(transaction: dict, probability: float, policy: dict) -> AgentReview:
-    print("⚠️ USING FALLBACK (NO LLM)")
     codes = _reason_codes(transaction, probability, policy["risk_band"])
     amount = float(transaction.get("amt", 0) or 0)
     category = transaction.get("category", "unknown")
@@ -52,14 +50,10 @@ def _fallback_review(transaction: dict, probability: float, policy: dict) -> Age
         recommendation=decision,
         confidence=min(max(probability, 0.0), 1.0),
         reason_codes=codes,
-        # summary=(
-        #     f"{policy['risk_band']} risk transaction in {category} for "
-        #     f"${amount:,.2f}; policy recommends {decision}."
-        # ),
-        summary="FALLBACK USED → " + (
-        f"{policy['risk_band']} risk transaction in {category} for "
-        f"${amount:,.2f}; policy recommends {decision}."
-                ),
+        summary=(
+            f"{policy['risk_band']} risk transaction in {category} for "
+            f"${amount:,.2f}; policy recommends {decision}."
+        ),
         reviewer_questions=[
             "Does this customer have similar recent transaction behavior?",
             "Can the customer confirm the merchant and amount?",
@@ -88,11 +82,7 @@ Use the policy decision as the main control. Do not invent facts not in the tran
 """
 
     try:
-        print("🚀 Calling Groq LLM...")
         response = _get_llm().invoke(prompt).content
-        # return AgentReview.model_validate(json.loads(response))
-        result = AgentReview.model_validate(json.loads(response))
-        result.summary = "LLM USED → " + result.summary
-        return result
+        return AgentReview.model_validate(json.loads(response))
     except (json.JSONDecodeError, ValidationError, Exception):
         return _fallback_review(transaction, probability, policy)
