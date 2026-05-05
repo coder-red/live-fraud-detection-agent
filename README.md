@@ -183,40 +183,59 @@ Fraud detection requires a balance between security and customer experience. Hen
   <summary><strong>Repository Structure (click to expand)</strong></summary>
 
 ```text
-
 .
-├── agents
-│   └── fraud_agents.py
-├── app
-│   ├── __init__.py
-│   ├── main.py
-│   └── routes.py
-├── assets
-│   ├── confusion.png
-│   ├── features.png
-│   ├── FRAUD.png
-│   └── target.png
-├── data
-│   ├── fraudTest.csv
-│   └── fraudTrain.csv
-├── model
-│   ├── feature_list.pkl
-│   └── fraud_model.json
-├── notebooks
-│   ├── 01_eda.ipynb
-│   └── 02_training.ipynb
-├── src
-│   ├── __init__.py
-│   ├── features.py
-│   └── inference.py
-├── .env
-├── .gitignore
-├── config.py
-├── pyproject.toml
-├── README.md
-├── requirements.txt
-├── run_all.py
-└── uv.lock
+|-- Dockerfile
+|-- README.md
+|-- agents
+|   |-- fraud_agents.py
+|   `-- tools.py
+|-- app
+|   |-- __init__.py
+|   |-- db
+|   |   |-- __init__.py
+|   |   |-- connections.py
+|   |   `-- models.py
+|   |-- main.py
+|   `-- routes.py
+|-- assets
+|   |-- FRAUD.png
+|   |-- confusion.png
+|   |-- features.png
+|   `-- target.png
+|-- config.py
+|-- dashboard.py
+|-- data
+|   |-- fraudTest.csv
+|   |-- fraudTrain.csv
+|   `-- sample_transactions.csv
+|-- docker-compose.yml
+|-- docs
+|   |-- API.md
+|   `-- ROADMAP.md
+|-- model
+|   |-- feature_list.pkl
+|   `-- fraud_model.json
+|-- notebooks
+|   |-- 01_eda.ipynb
+|   `-- 02_training.ipynb
+|-- pyproject.toml
+|-- requirements-dev.txt
+|-- requirements.txt
+|-- run_all.py
+|-- scripts
+|   `-- generate_sample_transactions.py
+|-- src
+|   |-- __init__.py
+|   |-- agent_review.py
+|   |-- features.py
+|   |-- inference.py
+|   `-- policy.py
+|-- tests
+|   |-- test_agent_review.py
+|   |-- test_api.py
+|   |-- test_features.py
+|   `-- test_policy.py
+`-- uv.lock
 ```
 
 </details>

@@ -3,8 +3,9 @@ import requests
 import pandas as pd
 import time
 from pathlib import Path
+import os
 
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
 
 st.set_page_config(page_title="Fraud Console", layout="wide")
 
@@ -85,9 +86,24 @@ def load_all_sample_transactions() -> list[dict]:
     df = pd.read_csv(csv_path)
     return [_csv_row_to_payload(row.to_dict()) for _, row in df.iterrows()]
 
-# --- Connection check ---
+# --- Cached data fetchers ---
+# TTL=15s: fast for demo, fresh enough after decisions
 
-health = get_data("")
+@st.cache_data(ttl=15)
+def get_pending():
+    return get_data("cases/pending")
+
+@st.cache_data(ttl=15)
+def get_predictions():
+    return get_data("predictions?limit=100")
+
+@st.cache_data(ttl=60)
+def get_health():
+    return get_data("")
+
+# --- Connection check (cached, doesn't re-hit on every rerun) ---
+
+health = get_health()
 if not health:
     st.error("Connection Error: Could not reach API at http://localhost:8000")
     st.stop()
@@ -102,6 +118,8 @@ with col_refresh:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("↺ Refresh", use_container_width=True):
         st.session_state.pop("sim_results", None)
+        get_pending.clear()
+        get_predictions.clear()
         st.rerun()
 
 st.divider()
@@ -156,8 +174,6 @@ if st.button("▶  Score all transactions", key="run_simulation"):
         flagged = len(df[df["requires_review"] == True])
         blocked = len(df[df["decision"] == "BLOCK"])
         avg_lat = sum(latencies) / len(latencies) if latencies else 0
-
-        # Persist results so they survive the rerun
         st.session_state["sim_results"] = {
             "df":       df,
             "total":    total,
@@ -167,6 +183,9 @@ if st.button("▶  Score all transactions", key="run_simulation"):
             "avg_lat":  avg_lat,
             "total_ms": sum(latencies),
         }
+        # Invalidate queue cache so new cases appear immediately
+        get_pending.clear()
+        get_predictions.clear()
         st.rerun()
 
 # Render simulation results if they exist (persists across reruns)
@@ -207,10 +226,10 @@ if "sim_results" in st.session_state:
 
 st.divider()
 
-# --- Data ---
+# --- Data (cached) ---
 
-pending         = get_data("cases/pending")
-all_predictions = get_data("predictions?limit=100")
+pending         = get_pending()
+all_predictions = get_predictions()
 
 if pending == "NOT_FOUND" or all_predictions == "NOT_FOUND":
     st.error("Endpoint Error: Required API routes not found.")
@@ -245,6 +264,8 @@ if view_mode == "Review Queue":
         c2.metric("Transactions scored", len(all_predictions))
         st.caption("Run the simulation above to generate review cases.")
         if st.button("Refresh queue"):
+            get_pending.clear()
+            get_predictions.clear()
             st.rerun()
     else:
         st.caption(f"{len(pending)} case(s) awaiting reviewer action.")
@@ -310,6 +331,8 @@ if view_mode == "Review Queue":
                 b1, b2 = st.columns(2)
                 if b1.button("APPROVE", type="primary", use_container_width=True):
                     if post_data(f"cases/{selected_id}/decision", {"decision": "APPROVE", "note": note}):
+                        get_pending.clear()
+                        get_predictions.clear()
                         st.toast("APPROVED")
                         time.sleep(1)
                         st.rerun()
@@ -318,6 +341,8 @@ if view_mode == "Review Queue":
 
                 if b2.button("BLOCK", use_container_width=True):
                     if post_data(f"cases/{selected_id}/decision", {"decision": "BLOCK", "note": note}):
+                        get_pending.clear()
+                        get_predictions.clear()
                         st.toast("BLOCKED")
                         time.sleep(1)
                         st.rerun()
