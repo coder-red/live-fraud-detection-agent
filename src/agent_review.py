@@ -1,5 +1,6 @@
 import json
 import os
+from functools import lru_cache
 from typing import Literal
 
 from langchain_groq import ChatGroq
@@ -17,12 +18,12 @@ class AgentReview(BaseModel):
     reviewer_questions: list[str]
 
 
-def _reason_codes(transaction: dict, probability: float, risk_band: str) -> list[str]:
-    """Derive stable reason codes from the same facts the reviewer sees.
+@lru_cache(maxsize=1)
+def _get_llm() -> ChatGroq:
+    return ChatGroq(model="llama-3.1-8b-instant", temperature=0.1)
 
-    These codes make the LLM review auditable: even if the narrative changes,
-    the product still has compact, filterable explanations for the case queue.
-    """
+
+def _reason_codes(transaction: dict, probability: float, risk_band: str) -> list[str]:
     codes: list[str] = []
     amount = float(transaction.get("amt", 0) or 0)
     category = str(transaction.get("category", "")).lower()
@@ -40,11 +41,6 @@ def _reason_codes(transaction: dict, probability: float, risk_band: str) -> list
 
 
 def _fallback_review(transaction: dict, probability: float, policy: dict) -> AgentReview:
-    """Return a deterministic review when an LLM is unavailable or invalid.
-
-    The API should still create usable fraud cases without a Groq key, network
-    access, or perfectly formatted model output from the LLM.
-    """
     codes = _reason_codes(transaction, probability, policy["risk_band"])
     amount = float(transaction.get("amt", 0) or 0)
     category = transaction.get("category", "unknown")
@@ -66,12 +62,10 @@ def _fallback_review(transaction: dict, probability: float, policy: dict) -> Age
 
 
 def generate_agent_review(transaction: dict, probability: float, policy: dict) -> AgentReview:
-    """Generate a structured LLM case review with a deterministic fallback."""
     if not os.getenv("GROQ_API_KEY"):
         return _fallback_review(transaction, probability, policy)
 
-    prompt = f"""
-You are a fraud operations analyst. Return only valid JSON matching this schema:
+    prompt = f"""You are a fraud operations analyst. Return only valid JSON matching this schema:
 {{
   "recommendation": "APPROVE" | "REVIEW" | "BLOCK",
   "confidence": number between 0 and 1,
@@ -84,13 +78,11 @@ Model probability: {probability}
 Policy decision: {policy}
 Transaction: {transaction}
 
-Use the policy decision as the main control. The LLM may explain or recommend
-more review, but it should not invent facts that are not in the transaction.
+Use the policy decision as the main control. Do not invent facts not in the transaction.
 """
 
     try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
-        response = llm.invoke(prompt).content
+        response = _get_llm().invoke(prompt).content
         return AgentReview.model_validate(json.loads(response))
     except (json.JSONDecodeError, ValidationError, Exception):
         return _fallback_review(transaction, probability, policy)

@@ -49,5 +49,3 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-if __name__ == "__main__":
-    init_db()
