@@ -312,7 +312,6 @@ async def list_pending_cases(
         .all()
     )
 
-
 @router.get("/cases/{case_id}", response_model=FraudCaseRecord)
 async def get_case(case_id: str, db: Session = Depends(get_db)):
     fraud_case = db.query(FraudCase).filter(FraudCase.case_id == case_id).first()

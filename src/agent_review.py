@@ -20,7 +20,7 @@ class AgentReview(BaseModel):
 
 @lru_cache(maxsize=1)
 def _get_llm() -> ChatGroq:
-    return ChatGroq(model="llama-3.1-8b-instant", temperature=0.1)
+    return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
 
 
 def _reason_codes(transaction: dict, probability: float, risk_band: str) -> list[str]:
