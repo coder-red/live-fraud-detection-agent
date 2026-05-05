@@ -63,7 +63,13 @@ def post_predict(payload: dict) -> tuple[bool, object, float]:
         return False, str(exc), 0.0
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent
+    # Try script-relative first, fall back to cwd
+    script_dir = Path(__file__).resolve().parent
+    if (script_dir / "data" / "sample_transactions.csv").exists():
+        return script_dir
+    return Path.cwd()
+
+st.write(f"DEBUG: looking for CSV at `{csv_path}`")
 
 def _csv_row_to_payload(row: dict) -> dict:
     out: dict = {}
