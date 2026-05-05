@@ -22,7 +22,6 @@ from src.policy import classify_risk
 
 router = APIRouter()
 
-# this defines the request body so when someone calls POST /predict, FastAPI reads the JSON body and turns it into a Transaction object.
 class Transaction(BaseModel):
     trans_date_trans_time: str
     amt: float = Field(gt=0)
@@ -39,9 +38,8 @@ class Transaction(BaseModel):
     gender: str
     job: str
 
-# this defines the response shape
 class PredictionRecord(BaseModel):
-    model_config = ConfigDict(from_attributes=True) # this tells Pydantic it can build the response from an ORM object, not just a plain dict
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     trans_date_trans_time: datetime
@@ -91,11 +89,9 @@ _engine: Any | None = None
 
 
 def get_inference_engine() -> Any:
-    """Load the model lazily so tests and app startup can override it cleanly."""
     global _engine
     if _engine is None:
         from src.inference import FraudInference
-
         base_path = Path(__file__).parent.parent / "model"
         _engine = FraudInference(
             model_path=str(base_path / "fraud_model.json"),
@@ -103,13 +99,12 @@ def get_inference_engine() -> Any:
         )
     return _engine
 
-# this function converts the ISO datetime string from the request into a Python datetime object that we can save in Postgres. FastAPI doesn't do this automatically because the input is a string, not a datetime, but our DB model expects a datetime.
+
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
 def _input_fingerprint(data: Transaction) -> str:
-    """Canonical hash of inbound transaction fields (idempotency / dedupe)."""
     d = data.model_dump()
     for key in ("amt", "lat", "long", "merch_lat", "merch_long"):
         d[key] = round(float(d[key]), 6)
@@ -131,7 +126,6 @@ def _latest_case_for_prediction(db: Session, prediction_id: int) -> FraudCase | 
 
 
 def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) -> dict:
-    """Build an API response that includes case metadata when it exists."""
     return {
         "id": record.id,
         "trans_date_trans_time": record.trans_date_trans_time,
@@ -153,7 +147,47 @@ def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) 
     }
 
 
-# router.post tells FastAPI: “the function below handles POST requests to /predict”, while response_model=PredictionRecord tells FastAPI how to shape the output
+def _record_to_dict(record: FraudPrediction) -> dict:
+    """Rebuild transaction dict from a saved FraudPrediction for agent review."""
+    return {
+        "trans_date_trans_time": record.trans_date_trans_time.isoformat(),
+        "amt": record.amt,
+        "category": record.category,
+        "merchant": record.merchant,
+        "lat": record.lat,
+        "long": record.long,
+        "merch_lat": record.merch_lat,
+        "merch_long": record.merch_long,
+        "city": record.city,
+        "state": record.state,
+        "city_pop": record.city_pop,
+        "dob": record.dob.isoformat(),
+        "gender": record.gender,
+        "job": record.job,
+    }
+
+
+def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudCase:
+    """Run agent review and insert a fresh PENDING_REVIEW FraudCase."""
+    review = generate_agent_review(_record_to_dict(record), record.probability, policy)
+    case = FraudCase(
+        case_id=str(uuid.uuid4()),
+        prediction_id=record.id,
+        risk_band=policy["risk_band"],
+        model_decision=policy["decision"],
+        agent_recommendation=review.recommendation,
+        agent_confidence=review.confidence,
+        reason_codes=review.reason_codes,
+        reviewer_questions=review.reviewer_questions,
+        reasoning=review.summary,
+        status="PENDING_REVIEW",
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    return case
+
+
 @router.post("/predict", response_model=PredictionRecord)
 async def predict_fraud(
     data: Transaction,
@@ -168,13 +202,21 @@ async def predict_fraud(
             .one_or_none()
         )
         if existing is not None:
-            return _prediction_payload(existing, _latest_case_for_prediction(db, existing.id))
+            case = _latest_case_for_prediction(db, existing.id)
+            # Re-open a case if the previous one was already reviewed
+            if existing.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+                policy = {
+                    "risk_band": existing.risk_band,
+                    "decision": existing.decision,
+                    "requires_review": True,
+                }
+                case = _open_new_case(db, existing, policy)
+            return _prediction_payload(existing, case)
 
         transaction_dict = data.model_dump()
         result = inference.predict(transaction_dict)
         policy = classify_risk(result["probability"])
 
-        # Build one DB row from the input transaction plus model output.
         record = FraudPrediction(
             trans_date_trans_time=_parse_datetime(data.trans_date_trans_time),
             amt=data.amt,
@@ -199,7 +241,6 @@ async def predict_fraud(
             input_fingerprint=fingerprint,
         )
 
-        # Commit the prediction first so the review case can reference its ID.
         db.add(record)
         try:
             db.commit()
@@ -210,34 +251,27 @@ async def predict_fraud(
                 .filter(FraudPrediction.input_fingerprint == fingerprint)
                 .one()
             )
-            return _prediction_payload(winner, _latest_case_for_prediction(db, winner.id))
+            case = _latest_case_for_prediction(db, winner.id)
+            if winner.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+                policy = {
+                    "risk_band": winner.risk_band,
+                    "decision": winner.decision,
+                    "requires_review": True,
+                }
+                case = _open_new_case(db, winner, policy)
+            return _prediction_payload(winner, case)
         db.refresh(record)
 
         case = None
         if policy["requires_review"]:
-            # The deterministic policy opens the case; the LLM only summarizes
-            # evidence and recommends a review action for human operators.
-            review = generate_agent_review(transaction_dict, result["probability"], policy)
-            case = FraudCase(
-                case_id=str(uuid.uuid4()),
-                prediction_id=record.id,
-                risk_band=policy["risk_band"],
-                model_decision=policy["decision"],
-                agent_recommendation=review.recommendation,
-                agent_confidence=review.confidence,
-                reason_codes=review.reason_codes,
-                reviewer_questions=review.reviewer_questions,
-                reasoning=review.summary,
-                status="PENDING_REVIEW",
-            )
-            record.agent_action = review.recommendation
-            record.reasoning = review.summary
-            db.add(case)
+            case = _open_new_case(db, record, policy)
+            record.agent_action = case.agent_recommendation
+            record.reasoning = case.reasoning
             db.commit()
-            db.refresh(case)
             db.refresh(record)
 
         return _prediction_payload(record, case)
+
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -249,7 +283,6 @@ async def list_predictions(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    # Return the newest saved predictions first.
     return (
         db.query(FraudPrediction)
         .order_by(FraudPrediction.created_at.desc())
@@ -271,7 +304,6 @@ async def list_pending_cases(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    # This is the review queue a dashboard would poll for human decisions.
     return (
         db.query(FraudCase)
         .filter(FraudCase.status == "PENDING_REVIEW")
@@ -301,8 +333,6 @@ async def decide_case(
     if fraud_case.status != "PENDING_REVIEW":
         raise HTTPException(status_code=409, detail="Fraud case has already been reviewed")
 
-    # Human decision closes the case. The model and agent remain as evidence,
-    # but the reviewer owns the final operational verdict.
     fraud_case.human_decision = decision.decision
     fraud_case.human_note = decision.note
     fraud_case.status = "APPROVED" if decision.decision == "APPROVE" else "BLOCKED"

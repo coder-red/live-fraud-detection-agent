@@ -85,7 +85,7 @@ def _csv_row_to_payload(row: dict) -> dict:
 
 def load_all_sample_transactions() -> list[dict]:
     csv_path = _project_root() / "data" / "sample_transactions.csv"
-    st.write(f"DEBUG: looking for CSV at `{csv_path}`")
+    # st.write(f"DEBUG: looking for CSV at `{csv_path}`")
     if not csv_path.exists():
         return []
     df = pd.read_csv(csv_path)
