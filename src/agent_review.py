@@ -83,7 +83,16 @@ Use the policy decision as the main control. Do not invent facts not in the tran
 
     try:
         response = _get_llm().invoke(prompt).content
-        return AgentReview.model_validate(json.loads(response))
+        
+        # Robust JSON extraction from markdown if present
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            import re
+            match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+            if match:
+                cleaned = match.group(1).strip()
+                
+        return AgentReview.model_validate(json.loads(cleaned))
     except (json.JSONDecodeError, ValidationError, Exception) as e:
         print(f"[agent_review] LLM failed: {type(e).__name__}: {e}")
         return _fallback_review(transaction, probability, policy)
