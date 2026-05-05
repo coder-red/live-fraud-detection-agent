@@ -32,7 +32,7 @@ st.markdown("""
 # --- Helpers ---
 
 def get_data(endpoint):
-    url = f"{API_BASE_URL}/{endpoint}" if endpoint else "http://localhost:8000/"
+    url = f"{API_BASE_URL}/{endpoint}" if endpoint else f"{API_BASE_URL}/"
     try:
         r = requests.get(url, timeout=3)
         if r.status_code == 200:
@@ -105,7 +105,7 @@ def get_health():
 
 health = get_health()
 if not health:
-    st.error("Connection Error: Could not reach API at http://localhost:8000")
+    st.error(f"Connection Error: Could not reach API at {API_BASE_URL}")
     st.stop()
 
 # --- Header ---
