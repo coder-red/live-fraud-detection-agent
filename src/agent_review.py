@@ -65,20 +65,32 @@ def generate_agent_review(transaction: dict, probability: float, policy: dict) -
     if not os.getenv("GROQ_API_KEY"):
         return _fallback_review(transaction, probability, policy)
 
-    prompt = f"""You are a fraud operations analyst. Return only valid JSON matching this schema:
+    prompt = f"""You are a senior fraud operations analyst. Your analysis must be specific, evidence-based, and actionable. Return only valid JSON matching this schema:
 {{
   "recommendation": "APPROVE" | "REVIEW" | "BLOCK",
   "confidence": number between 0 and 1,
-  "reason_codes": ["HIGH_AMOUNT", "NIGHT_TRANSACTION", "HIGH_RISK_CATEGORY", "LONG_DISTANCE_MERCHANT", "MODEL_HIGH_CONFIDENCE"],
-  "summary": "short reviewer-facing explanation",
-  "reviewer_questions": ["short question for human reviewer"]
+  "reason_codes": ["HIGH_AMOUNT", "NIGHT_TRANSACTION", "HIGH_RISK_CATEGORY", "LONG_DISTANCE_MERCHANT", "MODEL_HIGH_CONFIDENCE", "VELOCITY_CHECK", "GEOGRAPHIC_ANOMALY"],
+  "summary": "Expert analysis referencing specific data points, policy thresholds, and behavioral patterns. Mention which policy threshold was hit (e.g., 'CRITICAL risk band triggered at {probability:.0%} probability, exceeding 90% BLOCK threshold').",
+  "reviewer_questions": ["Specific next best action for human reviewer, e.g., 'Outbound call required: Verify if customer is currently traveling' or 'Check for recent data breaches affecting this merchant category'"]
 }}
 
-Model probability: {probability}
-Policy decision: {policy}
-Transaction: {transaction}
+CONTEXT:
+- Model probability: {probability:.4f} ({probability:.1%})
+- Policy decision: {policy}
+- Risk band thresholds: LOW (<25%), MEDIUM (25-54%), HIGH (55-89%), CRITICAL (≥90%)
+- Transaction details: {transaction}
 
-Use the policy decision as the main control. Do not invent facts not in the transaction.
+INSTRUCTIONS:
+1. Start your summary by stating which policy threshold was triggered and why.
+2. Reference specific transaction data points (amount, time, location, category).
+3. Compare against typical customer behavior patterns when possible.
+4. Provide actionable next steps, not generic questions.
+5. Be concise but specific — you're writing for a fraud analyst, not a customer.
+
+Example of good analysis:
+"CRITICAL risk band triggered at 97% probability, exceeding 90% BLOCK threshold. $1,433 transaction at 'fraud-store-net' in Boston at 01:28 AM — 4.2x above customer's 30-day average. Nighttime misc_net activity deviates from historic Miami-based profile. Velocity check: 3rd transaction in 2 hours."
+
+Do not invent facts not in the transaction. Use "unknown" for missing data.
 """
 
     try:
