@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+API_ROOT_URL = API_BASE_URL.split("/api")[0]
 
 st.set_page_config(page_title="Fraud Console", layout="wide")
 
@@ -99,7 +100,11 @@ def get_predictions():
 
 @st.cache_data(ttl=60)
 def get_health():
-    return get_data("")
+    try:
+        r = requests.get(f"{API_ROOT_URL}/", timeout=3)
+        return r.json() if r.status_code == 200 else None
+    except requests.RequestException:
+        return None
 
 # --- Connection check (cached, doesn't re-hit on every rerun) ---
 
