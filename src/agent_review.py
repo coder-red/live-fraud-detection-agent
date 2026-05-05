@@ -84,5 +84,6 @@ Use the policy decision as the main control. Do not invent facts not in the tran
     try:
         response = _get_llm().invoke(prompt).content
         return AgentReview.model_validate(json.loads(response))
-    except (json.JSONDecodeError, ValidationError, Exception):
+    except (json.JSONDecodeError, ValidationError, Exception) as e:
+        print(f"[agent_review] LLM failed: {type(e).__name__}: {e}")
         return _fallback_review(transaction, probability, policy)
