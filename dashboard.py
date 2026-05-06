@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import time
-from pathlib import Path
 import os
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
@@ -62,34 +61,14 @@ def post_predict(payload: dict) -> tuple[bool, object, float]:
     except requests.RequestException as exc:
         return False, str(exc), 0.0
 
-def _project_root() -> Path:
-    script_dir = Path(__file__).resolve().parent
-    if (script_dir / "data" / "sample_transactions.csv").exists():
-        return script_dir
-    return Path.cwd()
+def generate_simulation_transactions(count: int = 50, fraud_ratio: float = 0.5) -> list[dict]:
+    """Generate fresh random transactions for simulation.
 
-def _csv_row_to_payload(row: dict) -> dict:
-    out: dict = {}
-    for key, val in row.items():
-        if key == "is_fraud":
-            continue
-        if pd.isna(val):
-            continue
-        if key in ("amt", "lat", "long", "merch_lat", "merch_long"):
-            out[key] = float(val)
-        elif key == "city_pop":
-            out[key] = int(val)
-        else:
-            out[key] = str(val).strip()
-    return out
-
-def load_all_sample_transactions() -> list[dict]:
-    csv_path = _project_root() / "data" / "sample_transactions.csv"
-    # st.write(f"DEBUG: looking for CSV at `{csv_path}`")
-    if not csv_path.exists():
-        return []
-    df = pd.read_csv(csv_path)
-    return [_csv_row_to_payload(row.to_dict()) for _, row in df.iterrows()]
+    Each call produces unique transactions, ensuring no duplicate fingerprints
+    and always creating new predictions and review cases.
+    """
+    from src.transaction_generator import generate_transactions
+    return generate_transactions(count=count, fraud_ratio=fraud_ratio)
 
 # --- Cached data fetchers ---
 
@@ -142,10 +121,10 @@ st.markdown(
 )
 
 if st.button("▶  Score all transactions", key="run_simulation"):
-    payloads = load_all_sample_transactions()
+    payloads = generate_simulation_transactions(count=50, fraud_ratio=0.5)
 
     if not payloads:
-        st.error("No sample data found at `data/sample_transactions.csv`.")
+        st.error("Failed to generate transactions.")
     else:
         results  = []
         latencies = []

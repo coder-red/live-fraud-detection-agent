@@ -62,7 +62,9 @@ def _fallback_review(transaction: dict, probability: float, policy: dict) -> Age
 
 
 def generate_agent_review(transaction: dict, probability: float, policy: dict) -> AgentReview:
-    if not os.getenv("GROQ_API_KEY"):
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key:
+        print(f"[agent_review] GROQ_API_KEY not set, using fallback review")
         return _fallback_review(transaction, probability, policy)
 
     prompt = f"""You are a senior fraud operations analyst. Your analysis must be specific, evidence-based, and actionable. Return only valid JSON matching this schema:

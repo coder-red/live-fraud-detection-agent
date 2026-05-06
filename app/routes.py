@@ -204,14 +204,24 @@ async def predict_fraud(
         )
         if existing is not None:
             case = _latest_case_for_prediction(db, existing.id)
-            # Re-open a case ONLY if no case exists at all
-            if existing.requires_review and case is None:
-                policy = {
-                    "risk_band": existing.risk_band,
-                    "decision": existing.decision,
-                    "requires_review": True,
-                }
-                case = _open_new_case(db, existing, policy)
+            # Re-open a case if review is needed and no active pending case exists
+            # This allows re-scoring to create fresh cases, but won't immediately
+            # re-open a case that was just reviewed (the dashboard clears cache after review)
+            if existing.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+                # Check if the case was recently reviewed (within last 5 seconds)
+                # to avoid immediate re-opening after a human decision
+                should_reopen = True
+                if case is not None and case.status in ("APPROVED", "BLOCKED") and case.reviewed_at:
+                    from datetime import datetime, timedelta
+                    if datetime.utcnow() - case.reviewed_at < timedelta(seconds=5):
+                        should_reopen = False
+                if should_reopen:
+                    policy = {
+                        "risk_band": existing.risk_band,
+                        "decision": existing.decision,
+                        "requires_review": True,
+                    }
+                    case = _open_new_case(db, existing, policy)
             return _prediction_payload(existing, case)
 
         transaction_dict = data.model_dump()
@@ -253,13 +263,19 @@ async def predict_fraud(
                 .one()
             )
             case = _latest_case_for_prediction(db, winner.id)
-            if winner.requires_review and case is None:
-                policy = {
-                    "risk_band": winner.risk_band,
-                    "decision": winner.decision,
-                    "requires_review": True,
-                }
-                case = _open_new_case(db, winner, policy)
+            # Re-open a case if review is needed and no active pending case exists
+            if winner.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+                should_reopen = True
+                if case is not None and case.status in ("APPROVED", "BLOCKED") and case.reviewed_at:
+                    if datetime.utcnow() - case.reviewed_at < timedelta(seconds=5):
+                        should_reopen = False
+                if should_reopen:
+                    policy = {
+                        "risk_band": winner.risk_band,
+                        "decision": winner.decision,
+                        "requires_review": True,
+                    }
+                    case = _open_new_case(db, winner, policy)
             return _prediction_payload(winner, case)
         db.refresh(record)
 
