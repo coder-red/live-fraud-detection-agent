@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 # ── Geographic templates ─────────────────────────────────────────────────────
+# Reusable across simulation runs so DB tools return meaningful data
 
 LOCS = [
     ("Houston", "TX", 29.76, -95.37, 2_320_268),
@@ -51,6 +52,8 @@ LEGIT_JOBS = [
 ]
 
 # ── Fraud (high-risk) templates ──────────────────────────────────────────────
+# These merchants are REUSED across simulation runs so the DB accumulates
+# fraud history, making the agent's DB queries meaningful.
 
 FRAUD_CATS = [
     "shopping_net",

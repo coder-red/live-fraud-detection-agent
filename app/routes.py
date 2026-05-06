@@ -170,7 +170,7 @@ def _record_to_dict(record: FraudPrediction) -> dict:
 
 def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudCase:
     """Run agent review and insert a fresh PENDING_REVIEW FraudCase."""
-    review = generate_agent_review(_record_to_dict(record), record.probability, policy)
+    review = generate_agent_review(_record_to_dict(record), record.probability, policy, db=db)
     case = FraudCase(
         case_id=str(uuid.uuid4()),
         prediction_id=record.id,
