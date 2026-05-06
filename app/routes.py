@@ -55,8 +55,8 @@ class PredictionRecord(BaseModel):
     decision: str | None = None
     requires_review: bool | None = None
     case_id: str | None = None
-    agent_recommendation: str | None = None
-    agent_summary: str | None = None
+    agent_recommendation: str | None = Field(None, alias="agent_action")
+    agent_summary: str | None = Field(None, alias="reasoning")
     created_at: datetime
 
 
@@ -126,6 +126,7 @@ def _latest_case_for_prediction(db: Session, prediction_id: int) -> FraudCase | 
 
 
 def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) -> dict:
+    # Use record fields as fallback if case is missing or already reviewed
     return {
         "id": record.id,
         "trans_date_trans_time": record.trans_date_trans_time,
@@ -141,8 +142,8 @@ def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) 
         "decision": record.decision,
         "requires_review": record.requires_review,
         "case_id": case.case_id if case else None,
-        "agent_recommendation": case.agent_recommendation if case else None,
-        "agent_summary": case.reasoning if case else None,
+        "agent_recommendation": case.agent_recommendation if case else record.agent_action,
+        "agent_summary": case.reasoning if case else record.reasoning,
         "created_at": record.created_at,
     }
 
@@ -203,8 +204,8 @@ async def predict_fraud(
         )
         if existing is not None:
             case = _latest_case_for_prediction(db, existing.id)
-            # Re-open a case if the previous one was already reviewed
-            if existing.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+            # Re-open a case ONLY if no case exists at all
+            if existing.requires_review and case is None:
                 policy = {
                     "risk_band": existing.risk_band,
                     "decision": existing.decision,
@@ -252,7 +253,7 @@ async def predict_fraud(
                 .one()
             )
             case = _latest_case_for_prediction(db, winner.id)
-            if winner.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+            if winner.requires_review and case is None:
                 policy = {
                     "risk_band": winner.risk_band,
                     "decision": winner.decision,
