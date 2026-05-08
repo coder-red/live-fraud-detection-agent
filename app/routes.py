@@ -39,7 +39,7 @@ class Transaction(BaseModel):
     job: str
 
 class PredictionRecord(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
     trans_date_trans_time: datetime

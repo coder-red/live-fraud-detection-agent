@@ -39,7 +39,7 @@ class StubInference:  # 🧪 TEST DOUBLE (MOCK): replaces real ML model
             "features": [],
         }
 
-
+# async is used for allowing a task to run in the background while waiting for a response, improving performance
 @pytest.fixture()
 def anyio_backend():  # 🧪 TEST SETUP
     return "asyncio"
@@ -139,7 +139,7 @@ async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_cli
     client, routes, state = api_client
     state["probability"] = 0.93
 
-    routes.generate_agent_review = lambda transaction, probability, policy: SimpleNamespace(
+    routes.generate_agent_review = lambda transaction, probability, policy, **kwargs: SimpleNamespace(
         recommendation="BLOCK",
         confidence=0.93,
         reason_codes=["HIGH_AMOUNT", "HIGH_RISK_CATEGORY"],
@@ -155,7 +155,8 @@ async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_cli
     assert payload["decision"] == "BLOCK"
     assert payload["requires_review"] is True
     assert payload["case_id"]
-    assert payload["agent_recommendation"] == "BLOCK"
+    # Map the aliases to the actual keys we want to test
+    assert payload["agent_action"] == "BLOCK"
 
     pending = (await client.get("/api/v1/cases/pending")).json()
     assert len(pending) == 1
