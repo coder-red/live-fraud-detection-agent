@@ -14,17 +14,23 @@ from sqlalchemy.orm import Session
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.db.connections import get_db
+from app.db.connections import get_db, get_redis
 from app.db.models import FraudCase, FraudPrediction
 from src.agent_review import generate_agent_review
 from src.policy import classify_risk
+from redis import Redis
 
 
 router = APIRouter()
 
+# --- DATA MODELS (Pydantic) ---
+# These classes define what "valid" data looks like for our API.
+# If a user sends data that doesn't match these, FastAPI will automatically send an error.
+
 class Transaction(BaseModel):
+    """The data we expect when someone asks for a fraud prediction."""
     trans_date_trans_time: str
-    amt: float = Field(gt=0)
+    amt: float = Field(gt=0) # Must be a number greater than 0
     category: str
     merchant: str
     lat: float
@@ -39,6 +45,7 @@ class Transaction(BaseModel):
     job: str
 
 class PredictionRecord(BaseModel):
+    """The data we send back after a prediction is made."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -51,16 +58,17 @@ class PredictionRecord(BaseModel):
     is_fraud: bool
     probability: float
     threshold: float
-    risk_band: str | None = None
+    risk_band: str | None = None #none means the model didn't assign a risk band (e.g., if it failed before that step)
     decision: str | None = None
     requires_review: bool | None = None
     case_id: str | None = None
-    agent_recommendation: str | None = Field(None, alias="agent_action")
+    agent_recommendation: str | None = Field(None, alias="agent_action") # We use 'alias' to map the database field 'agent_action' to the API field 'agent_recommendation' for clarity in the API response.
     agent_summary: str | None = Field(None, alias="reasoning")
     created_at: datetime
 
 
 class FraudCaseRecord(BaseModel):
+    """The data model for a 'Case' that needs human or AI agent review."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -68,7 +76,8 @@ class FraudCaseRecord(BaseModel):
     prediction_id: int
     risk_band: str
     model_decision: str
-    agent_recommendation: str | None = None
+    # 'None' means the field is empty because it hasn't been filled yet (e.g., waiting for review).
+    agent_recommendation: str | None = None 
     agent_confidence: float | None = None
     reason_codes: list[str] | None = None
     reviewer_questions: list[str] | None = None
@@ -81,14 +90,17 @@ class FraudCaseRecord(BaseModel):
 
 
 class HumanDecisionRequest(BaseModel):
+    """What we expect when a human clicks 'Approve' or 'Block' in the dashboard."""
     decision: Literal["APPROVE", "BLOCK"]
-    note: str | None = None
-
-
-_engine: Any | None = None
+    note: str | None = None # Optional field for the human reviewer to add notes about their decision.
+    
+# --- GLOBAL STATE ---
+# We store the ML model engine here so we don't have to reload it from disk every time someone hits the API.
+_engine: Any | None = None 
 
 
 def get_inference_engine() -> Any:
+    """Helper function to load and return the Fraud Detection AI model."""
     global _engine
     if _engine is None:
         from src.inference import FraudInference
@@ -100,23 +112,34 @@ def get_inference_engine() -> Any:
     return _engine
 
 
+# --- HELPER FUNCTIONS ---
+
 def _parse_datetime(value: str) -> datetime:
+    """Converts a date string from the user into a Python datetime object."""
     return datetime.fromisoformat(value)
 
 
 def _input_fingerprint(data: Transaction) -> str:
+    """
+    Creates a unique ID (hash) for a transaction based on its data.
+    If two transactions have the exact same amount, merchant, etc., they get the same ID.
+    This helps us detect duplicates instantly.
+    """
     d = data.model_dump()
+    # We round numbers and strip spaces to make sure tiny differences don't break our matching.
     for key in ("amt", "lat", "long", "merch_lat", "merch_long"):
         d[key] = round(float(d[key]), 6)
     d["city_pop"] = int(d["city_pop"])
     for key in ("trans_date_trans_time", "category", "merchant", "city", "state", "dob", "gender", "job"):
         d[key] = str(d[key]).strip()
-    ordered = {k: d[k] for k in sorted(d)}
+    # Sort the keys so the order doesn't change the ID.
+    ordered = {k: d[k] for k in sorted(d)} # creates an ordered dict sorted by key, sorting is crucial cos hashes will be different if the same data is in a different order. By sorting, we ensure the same data always produces the same hash.
     blob = json.dumps(ordered, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
 
 
 def _latest_case_for_prediction(db: Session, prediction_id: int) -> FraudCase | None:
+    """Finds the most recent review 'Case' associated with a specific prediction."""
     return (
         db.query(FraudCase)
         .filter(FraudCase.prediction_id == prediction_id)
@@ -126,7 +149,7 @@ def _latest_case_for_prediction(db: Session, prediction_id: int) -> FraudCase | 
 
 
 def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) -> dict:
-    # Use record fields as fallback if case is missing or already reviewed
+    """Combines a Database record and its Review Case into a single dictionary for the API response."""
     return {
         "id": record.id,
         "trans_date_trans_time": record.trans_date_trans_time,
@@ -149,7 +172,7 @@ def _prediction_payload(record: FraudPrediction, case: FraudCase | None = None) 
 
 
 def _record_to_dict(record: FraudPrediction) -> dict:
-    """Rebuild transaction dict from a saved FraudPrediction for agent review."""
+    """Turns a saved database record back into a simple dictionary (used for re-running reviews)."""
     return {
         "trans_date_trans_time": record.trans_date_trans_time.isoformat(),
         "amt": record.amt,
@@ -169,7 +192,10 @@ def _record_to_dict(record: FraudPrediction) -> dict:
 
 
 def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudCase:
-    """Run agent review and insert a fresh PENDING_REVIEW FraudCase."""
+    """
+    Triggers an automated 'Agent Review' (using the LLM) and creates a new
+    entry in the FraudCase table for human review.
+    """
     review = generate_agent_review(_record_to_dict(record), record.probability, policy, db=db)
     case = FraudCase(
         case_id=str(uuid.uuid4()),
@@ -191,25 +217,67 @@ def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudC
 
 @router.post("/predict", response_model=PredictionRecord)
 async def predict_fraud(
+    # dependency injection
     data: Transaction,
-    db: Session = Depends(get_db),
-    inference: Any = Depends(get_inference_engine),
+    db: Session = Depends(get_db), # Depends is how fastapi handles "dependencies": here it is for getting a db session
+    redis: Redis | None = Depends(get_redis), # redis | none means the API can work even if Redis is down
+    inference: Any = Depends(get_inference_engine), # Any specifies that the inference engine can be of any type, and we use Depends to load it lazily.
 ):
+    """This is the main endpoint for getting a fraud prediction.
+It first checks Redis for a recent duplicate transaction (fast), then checks Postgres (slow), and if it's new, 
+it runs the ML model to get a prediction. It also handles the logic for opening review cases if needed."""
     try:
         fingerprint = _input_fingerprint(data)
+        
+        # 1. Check Redis for recent deduplication (Fast Path).
+        # We use a hash (fingerprint) of the transaction data as a key to skip expensive ML inference
+        # if the exact same transaction was processed recently.
+        if redis:
+            try:
+                # 'fp:' prefix stands for 'fingerprint'.
+                cached_id = redis.get(f"fp:{fingerprint}")
+                if cached_id:
+                    # If found in Redis, fetch the full record from DB.
+                    existing = db.get(FraudPrediction, int(cached_id))
+                    if existing:
+                        case = _latest_case_for_prediction(db, existing.id)
+                        # Logic for re-opening cases for review if needed...
+                        if existing.requires_review and (case is None or case.status != "PENDING_REVIEW"):
+                            should_reopen = True
+                            if case is not None and case.status in ("APPROVED", "BLOCKED") and case.reviewed_at:
+                                from datetime import datetime, timedelta
+                                if datetime.utcnow() - case.reviewed_at < timedelta(seconds=5):
+                                    should_reopen = False
+                            if should_reopen:
+                                policy = {
+                                    "risk_band": existing.risk_band,
+                                    "decision": existing.decision,
+                                    "requires_review": True,
+                                }
+                                case = _open_new_case(db, existing, policy)
+                        return _prediction_payload(existing, case)
+            except Exception:# Exception is generic, catches any exception that is not caught by more specific exception handlers.
+                # If Redis is down or times out, we silently fail and proceed to the DB check.
+                # This ensures Redis is an optimization, not a hard dependency for the API.
+                pass
+
+        # 2. Check Postgres (Slow Path/Fallback)
         existing = (
             db.query(FraudPrediction)
             .filter(FraudPrediction.input_fingerprint == fingerprint)
             .one_or_none()
         )
         if existing is not None:
+            # If found in Postgres but not in Redis, populate the Redis cache for subsequent requests.
+            if redis:
+                try:
+                    # Cache the mapping of fingerprint -> DB record ID for 1 hour (3600 seconds).
+                    redis.setex(f"fp:{fingerprint}", 3600, existing.id)
+                except Exception: # Exception is generic, catches any exception that is not caught by more specific exception handlers.
+                    pass
+            
             case = _latest_case_for_prediction(db, existing.id)
-            # Re-open a case if review is needed and no active pending case exists
-            # This allows re-scoring to create fresh cases, but won't immediately
-            # re-open a case that was just reviewed (the dashboard clears cache after review)
             if existing.requires_review and (case is None or case.status != "PENDING_REVIEW"):
-                # Check if the case was recently reviewed (within last 5 seconds)
-                # to avoid immediate re-opening after a human decision
                 should_reopen = True
                 if case is not None and case.status in ("APPROVED", "BLOCKED") and case.reviewed_at:
                     from datetime import datetime, timedelta
@@ -255,18 +323,32 @@ async def predict_fraud(
         db.add(record)
         try:
             db.commit()
-        except IntegrityError:
-            db.rollback()
+            db.refresh(record)
+            # 3. Add to Redis cache after successful creation
+            if redis:
+                try:
+                    redis.setex(f"fp:{fingerprint}", 3600, record.id)
+                except Exception:
+                    pass
+        except IntegrityError: # IntegrityError is a subclass of Exception
+            db.rollback() # rollback undoes changes in the db if integrity error occurs
             winner = (
                 db.query(FraudPrediction)
                 .filter(FraudPrediction.input_fingerprint == fingerprint)
                 .one()
             )
+            # Update Redis cache with the winner
+            if redis:
+                try:
+                    redis.setex(f"fp:{fingerprint}", 3600, winner.id) # setex sets a key with an expiration time
+                except Exception:
+                    pass
+            
             case = _latest_case_for_prediction(db, winner.id)
-            # Re-open a case if review is needed and no active pending case exists
             if winner.requires_review and (case is None or case.status != "PENDING_REVIEW"):
                 should_reopen = True
                 if case is not None and case.status in ("APPROVED", "BLOCKED") and case.reviewed_at:
+                    from datetime import datetime, timedelta
                     if datetime.utcnow() - case.reviewed_at < timedelta(seconds=5):
                         should_reopen = False
                 if should_reopen:
@@ -277,7 +359,6 @@ async def predict_fraud(
                     }
                     case = _open_new_case(db, winner, policy)
             return _prediction_payload(winner, case)
-        db.refresh(record)
 
         case = None
         if policy["requires_review"]:
@@ -297,9 +378,13 @@ async def predict_fraud(
 
 @router.get("/predictions", response_model=list[PredictionRecord])
 async def list_predictions(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=100), # ge is greater than or equal to, le is less than or equal to
     db: Session = Depends(get_db),
 ):
+    """
+    Returns a list of the most recent fraud predictions.
+    Add the 'limit' parameter to say how many predictions to return (e.g.,limit=10).
+    """
     return (
         db.query(FraudPrediction)
         .order_by(FraudPrediction.created_at.desc())
@@ -310,6 +395,7 @@ async def list_predictions(
 
 @router.get("/predictions/{prediction_id}", response_model=PredictionRecord)
 async def get_prediction(prediction_id: int, db: Session = Depends(get_db)):
+    """Fetches the details of a single prediction using its ID."""
     record = db.get(FraudPrediction, prediction_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -321,6 +407,10 @@ async def list_pending_cases(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    """
+    Returns a list of 'Cases' that are currently waiting for a human or agent review.
+    These are the ones shown in the 'Pending' tab of the dashboard.
+    """
     return (
         db.query(FraudCase)
         .filter(FraudCase.status == "PENDING_REVIEW")
@@ -331,6 +421,7 @@ async def list_pending_cases(
 
 @router.get("/cases/{case_id}", response_model=FraudCaseRecord)
 async def get_case(case_id: str, db: Session = Depends(get_db)):
+    """Fetches the details of a single review Case using its unique Case ID (UUID)."""
     fraud_case = db.query(FraudCase).filter(FraudCase.case_id == case_id).first()
     if fraud_case is None:
         raise HTTPException(status_code=404, detail="Fraud case not found")
@@ -343,21 +434,29 @@ async def decide_case(
     decision: HumanDecisionRequest,
     db: Session = Depends(get_db),
 ):
+    """
+    This is called when a human reviewer makes a final decision (Approve or Block).
+    It updates the Case status and saves the human's notes.
+    """
     fraud_case = db.query(FraudCase).filter(FraudCase.case_id == case_id).first()
     if fraud_case is None:
         raise HTTPException(status_code=404, detail="Fraud case not found")
+    
+    # We can't decide on a case that is already closed.
     if fraud_case.status != "PENDING_REVIEW":
         raise HTTPException(status_code=409, detail="Fraud case has already been reviewed")
 
+    # Update the case with the human's decision.
     fraud_case.human_decision = decision.decision
     fraud_case.human_note = decision.note
     fraud_case.status = "APPROVED" if decision.decision == "APPROVE" else "BLOCKED"
     fraud_case.reviewed_at = datetime.utcnow()
 
+    # Also update the original prediction record with the final human verdict.
     prediction = db.get(FraudPrediction, fraud_case.prediction_id)
     if prediction is not None:
         prediction.human_verdict = decision.decision
 
-    db.commit()
+    db.commit() # Save changes to the database.
     db.refresh(fraud_case)
     return fraud_case

@@ -80,18 +80,20 @@ The main remaining work is production hardening and operational polish.
 - Track prediction counts, review counts, approval/block rates, and fraud hit rate.
 - Track model quality metrics over time when labels are available.
 - Monitor model drift across amount, category, geography, and hour.
+- **[Redis] Add IP-based rate limiting to protect the API from carding attacks/bursts.**
 
-### Phase 11: Dynamic Retraining
+### Phase 11: Dynamic Retraining and Advanced Detection
 
 - Add a sliding-window retraining pipeline.
 - Compare candidate models against the current model before promotion.
 - Save model versions and evaluation reports.
 - Add rollback support if a new model performs worse.
+- **[Redis] Implement transaction deduplication cache using request fingerprints to skip redundant scoring.**
+- **[Redis] Implement "Velocity Counters" (e.g., transaction count per card/merchant in the last hour) to provide stateful signals to the model.**
 
 ## Future Improvements
 
 - Add authentication for review endpoints.
 - Add request logging and structured application logs.
-- Add Redis-backed background jobs if review or retraining tasks become async.
 - Add OpenAPI examples directly to FastAPI schemas.
 - Add CI checks for formatting, tests, and Docker build validation.
