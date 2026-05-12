@@ -1,28 +1,74 @@
 # Secrets and local env
 .env
 .env.*
+.env.local
+.env.production
 
 # Git metadata
 .git
+.gitignore
+.gitattributes
+
+# Docker files (not needed inside container)
+# The Dockerfile is used to build the image, but not needed inside
+Dockerfile
+# docker-compose files are for orchestration, not needed inside container
+docker-compose*.yml
+.dockerignore
 
 # Python caches and virtual environments
 __pycache__/
 **/__pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .venv/
 venv/
 env/
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
 
 # Local tooling and OS clutter
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 # Large local-only project assets not needed in the image
 notebooks/
+assets/
+coverage/
+htmlcov/
+
+# Documentation
+docs/
+*.md
+README.md
+LICENSE
+Makefile
+
+# Tests (not needed in production)
+tests/
+test_*.py
+conftest.py
 
 # Local database files or exports
 postgres_data/
 pgdata/
 *.sqlitedb
+*.db
+*.sqlite
+
+# Development scripts
+scripts/
+dev/

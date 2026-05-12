@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Use buildkit for better caching and build performance
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
     env_file:
       - .env
     ports:
@@ -11,38 +14,58 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       GROQ_API_KEY: ${GROQ_API_KEY}
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
     depends_on:
       redis:
-        condition: service_started
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
-      interval: 15s
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
+      start_period: 10s
+    # Resource limits for production safety
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
 
   redis:
     image: redis:7-alpine
     ports:
       - "127.0.0.1:6379:6379"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    # Use a volume for data persistence
+    volumes:
+      - redis_data:/data
 
   pgadmin:
     image: dpage/pgadmin4:8
     profiles: ["devtools"]
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - "127.0.0.1:5050:80"
     restart: unless-stopped
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
 
 volumes:
   postgres_data:
+  redis_data:
+  pgadmin_data:
