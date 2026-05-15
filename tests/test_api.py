@@ -1,15 +1,16 @@
-import importlib  # This lets the test reload app modules after changing environment variables.
-import sys  # This lets the test remove already loaded modules from Python memory.
-from types import SimpleNamespace  # This creates a small fake object for the agent review.
+import importlib
+import sys
+from collections import defaultdict
+from types import SimpleNamespace
 
-import httpx  # This lets async tests call the FastAPI app directly through ASGI.
-import pytest  # This gives us pytest fixtures and test helpers.
-
-
-pytestmark = pytest.mark.anyio  # This lets every test in this file use async/await.
+import httpx
+import pytest
 
 
-SAMPLE_TRANSACTION = {  # 🟢 NORMAL CASE DATA: standard valid transaction used across tests
+pytestmark = pytest.mark.anyio
+
+
+SAMPLE_TRANSACTION = {
     "trans_date_trans_time": "2026-02-19 03:00:00",
     "amt": 9099.99,
     "category": "shopping_net",
@@ -27,7 +28,7 @@ SAMPLE_TRANSACTION = {  # 🟢 NORMAL CASE DATA: standard valid transaction used
 }
 
 
-class StubInference:  # 🧪 TEST DOUBLE (MOCK): replaces real ML model
+class StubInference:
     def __init__(self, probability: float):
         self.probability = probability
 
@@ -39,15 +40,81 @@ class StubInference:  # 🧪 TEST DOUBLE (MOCK): replaces real ML model
             "features": [],
         }
 
-# async is used for allowing a task to run in the background while waiting for a response, improving performance
+
+class FakeRedisPipeline:
+    def __init__(self, redis_store):
+        self.redis_store = redis_store
+        self.commands = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def zremrangebyscore(self, key, minimum, maximum):
+        self.commands.append(("zremrangebyscore", key, minimum, maximum))
+        return self
+
+    def zcard(self, key):
+        self.commands.append(("zcard", key))
+        return self
+
+    def zadd(self, key, mapping):
+        self.commands.append(("zadd", key, mapping))
+        return self
+
+    def expire(self, key, seconds):
+        self.commands.append(("expire", key, seconds))
+        return self
+
+    async def execute(self):
+        results = []
+        for command in self.commands:
+            op = command[0]
+            if op == "zremrangebyscore":
+                _, key, minimum, maximum = command
+                bucket = self.redis_store.sorted_sets[key]
+                to_remove = [member for member, score in bucket.items() if minimum <= score <= maximum]
+                for member in to_remove:
+                    del bucket[member]
+                results.append(len(to_remove))
+            elif op == "zcard":
+                _, key = command
+                results.append(len(self.redis_store.sorted_sets[key]))
+            elif op == "zadd":
+                _, key, mapping = command
+                for member, score in mapping.items():
+                    self.redis_store.sorted_sets[key][member] = score
+                results.append(len(mapping))
+            elif op == "expire":
+                results.append(True)
+        return results
+
+
+class FakeRedis:
+    def __init__(self):
+        self.values = {}
+        self.sorted_sets = defaultdict(dict)
+
+    async def get(self, key):
+        return self.values.get(key)
+
+    async def setex(self, key, ttl, value):
+        self.values[key] = str(value)
+        return True
+
+    def pipeline(self, transaction=True):
+        return FakeRedisPipeline(self)
+
+
 @pytest.fixture()
-def anyio_backend():  # 🧪 TEST SETUP
+def anyio_backend():
     return "asyncio"
 
 
 @pytest.fixture()
-async def api_client(tmp_path, monkeypatch):  # 🧪 TEST INFRASTRUCTURE (shared setup)
-
+async def api_client(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{db_path}")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
@@ -89,11 +156,7 @@ async def api_client(tmp_path, monkeypatch):  # 🧪 TEST INFRASTRUCTURE (shared
     main.app.dependency_overrides.clear()
 
 
-# =========================
-# 🟢 NORMAL CASE TESTS
-# =========================
-
-async def test_predict_low_risk_persists_prediction_without_case(api_client):  # 🟢 NORMAL CASE
+async def test_predict_low_risk_persists_prediction_without_case(api_client):
     client, routes, state = api_client
     state["probability"] = 0.12
 
@@ -111,7 +174,7 @@ async def test_predict_low_risk_persists_prediction_without_case(api_client):  #
     assert predictions[0]["id"] == payload["id"]
 
 
-async def test_predict_same_payload_is_idempotent(api_client):  # 🟢 DEDUPE
+async def test_predict_same_payload_is_idempotent(api_client):
     client, routes, state = api_client
     state["probability"] = 0.12
 
@@ -123,7 +186,7 @@ async def test_predict_same_payload_is_idempotent(api_client):  # 🟢 DEDUPE
     assert len(predictions) == 1
 
 
-async def test_get_prediction_returns_saved_prediction(api_client):  # 🟢 NORMAL CASE
+async def test_get_prediction_returns_saved_prediction(api_client):
     client, routes, state = api_client
     state["probability"] = 0.12
 
@@ -135,7 +198,7 @@ async def test_get_prediction_returns_saved_prediction(api_client):  # 🟢 NORM
     assert response.json()["id"] == created["id"]
 
 
-async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_client):  # 🟢 NORMAL CASE (high-risk workflow)
+async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_client):
     client, routes, state = api_client
     state["probability"] = 0.93
 
@@ -155,7 +218,6 @@ async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_cli
     assert payload["decision"] == "BLOCK"
     assert payload["requires_review"] is True
     assert payload["case_id"]
-    # Map the aliases to the actual keys we want to test
     assert payload["agent_action"] == "BLOCK"
 
     pending = (await client.get("/api/v1/cases/pending")).json()
@@ -178,9 +240,16 @@ async def test_predict_high_risk_creates_case_and_accepts_human_decision(api_cli
     assert duplicate.status_code == 409
 
 
-async def test_get_case_returns_pending_case(api_client):  # 🟢 NORMAL CASE
+async def test_get_case_returns_pending_case(api_client):
     client, routes, state = api_client
     state["probability"] = 0.93
+    routes.generate_agent_review = lambda transaction, probability, policy, **kwargs: SimpleNamespace(
+        recommendation="BLOCK",
+        confidence=0.93,
+        reason_codes=["HIGH_AMOUNT"],
+        reviewer_questions=["Can the customer confirm this transaction?"],
+        summary="Escalated for review.",
+    )
 
     response = await client.post("/api/v1/predict", json=SAMPLE_TRANSACTION)
     case_id = response.json()["case_id"]
@@ -191,11 +260,51 @@ async def test_get_case_returns_pending_case(api_client):  # 🟢 NORMAL CASE
     assert case_response.json()["case_id"] == case_id
 
 
-# =========================
-# 🟡 EDGE CASE TESTS
-# =========================
+async def test_predict_caches_fingerprint_in_redis(api_client):
+    client, routes, state = api_client
+    state["probability"] = 0.12
 
-async def test_predictions_limit_accepts_upper_boundary(api_client):  # 🟡 EDGE CASE (boundary value)
+    fake_redis = FakeRedis()
+    main = importlib.import_module("app.main")
+
+    async def override_get_redis():
+        return fake_redis
+
+    main.app.dependency_overrides[routes.get_redis] = override_get_redis
+
+    response = await client.post("/api/v1/predict", json=SAMPLE_TRANSACTION)
+
+    assert response.status_code == 200
+    fingerprint = routes._input_fingerprint(routes.Transaction(**SAMPLE_TRANSACTION))
+    assert fake_redis.values[f"fp:{fingerprint}"] == str(response.json()["id"])
+
+
+async def test_rate_limit_returns_429_after_threshold(api_client):
+    client, routes, state = api_client
+    state["probability"] = 0.12
+
+    fake_redis = FakeRedis()
+    main = importlib.import_module("app.main")
+
+    async def override_get_redis():
+        return fake_redis
+
+    main.app.dependency_overrides[routes.get_redis] = override_get_redis
+
+    for _ in range(10):
+        response = await client.post("/api/v1/predict", json=SAMPLE_TRANSACTION)
+        assert response.status_code == 200
+
+    blocked = await client.post("/api/v1/predict", json=SAMPLE_TRANSACTION)
+
+    assert blocked.status_code == 429
+    detail = blocked.json()["detail"]
+    assert detail["error"] == "Rate limit exceeded"
+    assert detail["limit"] == 10
+    assert detail["window_seconds"] == 60
+
+
+async def test_predictions_limit_accepts_upper_boundary(api_client):
     client, routes, state = api_client
 
     response = await client.get("/api/v1/predictions?limit=100")
@@ -204,11 +313,7 @@ async def test_predictions_limit_accepts_upper_boundary(api_client):  # 🟡 EDG
     assert response.json() == []
 
 
-# =========================
-# 🔴 INVALID CASE TESTS
-# =========================
-
-@pytest.mark.parametrize("limit", [0, 101])  # 🔴 INVALID CASE (out of allowed range)
+@pytest.mark.parametrize("limit", [0, 101])
 async def test_predictions_limit_rejects_out_of_range_values(api_client, limit):
     client, routes, state = api_client
 
@@ -217,7 +322,7 @@ async def test_predictions_limit_rejects_out_of_range_values(api_client, limit):
     assert response.status_code == 422
 
 
-async def test_predict_rejects_missing_required_field(api_client):  # 🔴 INVALID CASE
+async def test_predict_rejects_missing_required_field(api_client):
     client, routes, state = api_client
 
     bad_transaction = SAMPLE_TRANSACTION.copy()
@@ -228,7 +333,7 @@ async def test_predict_rejects_missing_required_field(api_client):  # 🔴 INVAL
     assert response.status_code == 422
 
 
-async def test_predict_rejects_negative_amount(api_client):  # 🔴 INVALID CASE
+async def test_predict_rejects_negative_amount(api_client):
     client, routes, state = api_client
 
     bad_transaction = {**SAMPLE_TRANSACTION, "amt": -10.0}
@@ -238,7 +343,7 @@ async def test_predict_rejects_negative_amount(api_client):  # 🔴 INVALID CASE
     assert response.status_code == 422
 
 
-async def test_predict_rejects_bad_transaction_datetime(api_client):  # 🔴 INVALID CASE
+async def test_predict_rejects_bad_transaction_datetime(api_client):
     client, routes, state = api_client
 
     bad_transaction = {**SAMPLE_TRANSACTION, "trans_date_trans_time": "not-a-date"}
@@ -248,7 +353,7 @@ async def test_predict_rejects_bad_transaction_datetime(api_client):  # 🔴 INV
     assert response.status_code == 422
 
 
-async def test_get_prediction_returns_404_for_unknown_id(api_client):  # 🔴 INVALID CASE
+async def test_get_prediction_returns_404_for_unknown_id(api_client):
     client, routes, state = api_client
 
     response = await client.get("/api/v1/predictions/999999")
@@ -256,7 +361,7 @@ async def test_get_prediction_returns_404_for_unknown_id(api_client):  # 🔴 IN
     assert response.status_code == 404
 
 
-async def test_get_case_returns_404_for_unknown_case_id(api_client):  # 🔴 INVALID CASE
+async def test_get_case_returns_404_for_unknown_case_id(api_client):
     client, routes, state = api_client
 
     response = await client.get("/api/v1/cases/not-a-real-case")
@@ -264,9 +369,16 @@ async def test_get_case_returns_404_for_unknown_case_id(api_client):  # 🔴 INV
     assert response.status_code == 404
 
 
-async def test_decide_case_rejects_invalid_human_decision(api_client):  # 🔴 INVALID CASE
+async def test_decide_case_rejects_invalid_human_decision(api_client):
     client, routes, state = api_client
     state["probability"] = 0.93
+    routes.generate_agent_review = lambda transaction, probability, policy, **kwargs: SimpleNamespace(
+        recommendation="BLOCK",
+        confidence=0.93,
+        reason_codes=["HIGH_AMOUNT"],
+        reviewer_questions=["Can the customer confirm this transaction?"],
+        summary="Escalated for review.",
+    )
 
     created = (await client.post("/api/v1/predict", json=SAMPLE_TRANSACTION)).json()
 
@@ -278,7 +390,7 @@ async def test_decide_case_rejects_invalid_human_decision(api_client):  # 🔴 I
     assert response.status_code == 422
 
 
-async def test_decide_case_returns_404_for_unknown_case_id(api_client):  # 🔴 INVALID CASE
+async def test_decide_case_returns_404_for_unknown_case_id(api_client):
     client, routes, state = api_client
 
     response = await client.post(

@@ -1,13 +1,15 @@
 import hashlib
 import json
+import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from redis import asyncio as redis_asyncio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,10 +20,75 @@ from app.db.connections import get_db, get_redis
 from app.db.models import FraudCase, FraudPrediction
 from src.agent_review import generate_agent_review
 from src.policy import classify_risk
-from redis import Redis
 
 
 router = APIRouter()
+
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "10"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _client_ip(request: Request) -> str:
+    """
+    Resolve the client IP. Proxy headers are only trusted when explicitly enabled.
+    """
+    if TRUST_PROXY_HEADERS:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            first_hop = forwarded_for.split(",")[0].strip()
+            if first_hop:
+                return first_hop
+
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
+
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+async def rate_limit(request: Request, redis: redis_asyncio.Redis | None = Depends(get_redis)):
+    """
+    Redis-backed sliding-window rate limiting per client IP.
+    """
+    if not redis:
+        return
+
+    client_ip = _client_ip(request)
+    key = f"rate_limit:{client_ip}"
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    request_member = f"{now_ms}:{uuid.uuid4().hex}"
+    window_start_ms = now_ms - (RATE_LIMIT_WINDOW_SECONDS * 1000)
+
+    try:
+        async with redis.pipeline(transaction=True) as pipe:
+            # Keep only requests that are still inside the current sliding window.
+            pipe.zremrangebyscore(key, 0, window_start_ms)
+            pipe.zcard(key)
+            pipe.zadd(key, {request_member: now_ms})
+            pipe.expire(key, RATE_LIMIT_WINDOW_SECONDS + 5)
+            results = await pipe.execute()
+
+        current_count = int(results[1]) + 1
+        if current_count > RATE_LIMIT_MAX_REQUESTS:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "Rate limit exceeded",
+                    "message": f"Too many requests from this IP. Please try again in {RATE_LIMIT_WINDOW_SECONDS} seconds.",
+                    "ip": client_ip,
+                    "limit": RATE_LIMIT_MAX_REQUESTS,
+                    "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        # If Redis fails during the check, allow the request rather than taking down the API.
+        pass
+
 
 # --- DATA MODELS (Pydantic) ---
 # These classes define what "valid" data looks like for our API.
@@ -215,12 +282,12 @@ def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudC
     return case
 
 
-@router.post("/predict", response_model=PredictionRecord)
-async def predict_fraud(
+@router.post("/predict", dependencies=[Depends(rate_limit)])
+async def predict(
     # dependency injection
     data: Transaction,
     db: Session = Depends(get_db), # Depends is how fastapi handles "dependencies": here it is for getting a db session
-    redis: Redis | None = Depends(get_redis), # redis | none means the API can work even if Redis is down
+    redis: redis_asyncio.Redis | None = Depends(get_redis), # redis | none means the API can work even if Redis is down
     inference: Any = Depends(get_inference_engine), # Any specifies that the inference engine can be of any type, and we use Depends to load it lazily.
 ):
     """This is the main endpoint for getting a fraud prediction.
@@ -235,7 +302,7 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
         if redis:
             try:
                 # 'fp:' prefix stands for 'fingerprint'.
-                cached_id = redis.get(f"fp:{fingerprint}")
+                cached_id = await redis.get(f"fp:{fingerprint}")
                 if cached_id:
                     # If found in Redis, fetch the full record from DB.
                     existing = db.get(FraudPrediction, int(cached_id))
@@ -272,7 +339,7 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
             if redis:
                 try:
                     # Cache the mapping of fingerprint -> DB record ID for 1 hour (3600 seconds).
-                    redis.setex(f"fp:{fingerprint}", 3600, existing.id)
+                    await redis.setex(f"fp:{fingerprint}", 3600, existing.id)
                 except Exception: # Exception is generic, catches any exception that is not caught by more specific exception handlers.
                     pass
             
@@ -327,7 +394,7 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
             # 3. Add to Redis cache after successful creation
             if redis:
                 try:
-                    redis.setex(f"fp:{fingerprint}", 3600, record.id)
+                    await redis.setex(f"fp:{fingerprint}", 3600, record.id)
                 except Exception:
                     pass
         except IntegrityError: # IntegrityError is a subclass of Exception
@@ -340,7 +407,7 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
             # Update Redis cache with the winner
             if redis:
                 try:
-                    redis.setex(f"fp:{fingerprint}", 3600, winner.id) # setex sets a key with an expiration time
+                    await redis.setex(f"fp:{fingerprint}", 3600, winner.id) # setex sets a key with an expiration time
                 except Exception:
                     pass
             

@@ -17,6 +17,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "psycopg[binary]>=3.2.10",
     "pydantic-settings>=2.13.1",
+    "pytest>=9.0.3",
     "python-dotenv>=1.2.1",
     "redis>=7.4.0",
     "requests>=2.32.5",

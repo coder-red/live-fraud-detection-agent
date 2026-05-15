@@ -1,18 +1,19 @@
 # Stage 1: Build stage
-FROM ghcr.io/astral-sh/uv:latest AS builder
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Copy only the files needed for dependency resolution first
-COPY pyproject.toml uv.lock ./
+# Copy dependency metadata first so Docker can cache installs aggressively.
+COPY pyproject.toml uv.lock README.md ./
 
-# Install dependencies into a virtual environment
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python --no-cache-dir -r requirements.txt && \
-    uv sync --frozen --no-dev --python /app/.venv/bin/python
+# Install locked production dependencies without the project source yet.
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy application source code
+# Copy application source code after dependencies to maximize cache hits.
 COPY . .
+
+# Install the project into the prepared environment.
+RUN uv sync --frozen --no-dev
 
 # Stage 2: Runtime stage
 FROM python:3.11-slim AS runtime

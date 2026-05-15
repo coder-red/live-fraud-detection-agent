@@ -2,9 +2,9 @@ import os
 from collections.abc import Generator
 
 from dotenv import load_dotenv
+from redis import asyncio as redis_asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-import redis
 # a session is the main way to interact with the database. It manages connections and transactions.
 
 load_dotenv()
@@ -29,7 +29,7 @@ engine = create_engine(
 # We initialize the client once at the module level.
 try:
     # decode_responses=True ensures we get strings back instead of bytes from Redis.
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    redis_client = redis_asyncio.from_url(REDIS_URL, decode_responses=True)
 except Exception:
     # If Redis is unavailable, we set the client to None to allow the app to run without it.
     redis_client = None
@@ -60,19 +60,10 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def get_redis() -> redis.Redis | None:
+def get_redis() -> redis_asyncio.Redis | None:
     """
     Dependency for obtaining the Redis client.
     Used for fast-path deduplication and future stateful features (rate limiting, velocity).
-    Returns None if Redis is unavailable or connection fails.
+    Returns None if Redis was not configured successfully at startup.
     """
-    if redis_client:
-        try:
-            # Check if the connection is still alive.
-            redis_client.ping()
-            return redis_client
-        except redis.ConnectionError:
-            # Silently fail if Redis is down, allowing the application to fallback to DB-only mode.
-            return None
-    return None
-
+    return redis_client

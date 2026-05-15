@@ -47,6 +47,7 @@ This roadmap tracks what is already implemented and what remains for the live fr
 - Added persisted prediction and fraud case models in `app/db/models.py`.
 - Added endpoints to list predictions, fetch predictions, list pending cases, fetch cases, and submit human decisions.
 - Added Docker Compose services for API, Postgres, Redis, and optional pgAdmin.
+- **[Redis] Added IP-based rate limiting to protect the API from carding attacks.**
 
 ## Current State
 
@@ -80,7 +81,12 @@ The main remaining work is production hardening and operational polish.
 - Track prediction counts, review counts, approval/block rates, and fraud hit rate.
 - Track model quality metrics over time when labels are available.
 - Monitor model drift across amount, category, geography, and hour.
-- **[Redis] Add IP-based rate limiting to protect the API from carding attacks/bursts.**
+
+### Phase 10.5: Deployment Edge Layer
+
+- Add Nginx as a reverse proxy in front of the FastAPI service for production-style deployment.
+- Use it for TLS termination, request buffering, and cleaner public routing.
+- Forward client IP headers correctly so operational controls like rate limiting can trust the real caller when deployed behind a proxy.
 
 ### Phase 11: Dynamic Retraining and Advanced Detection
 
