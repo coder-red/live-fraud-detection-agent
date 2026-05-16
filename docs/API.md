@@ -172,12 +172,6 @@ The model returns a fraud probability. `src/policy.py` converts that probability
 
 ## Local Run Commands
 
-Run the full simulation:
-
-```bash
-uv run run_all.py
-```
-
 Run the Docker stack:
 
 ```bash

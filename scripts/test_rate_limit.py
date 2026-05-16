@@ -1,5 +1,4 @@
 import requests
-import time
 
 # Base URL for the local API
 BASE_URL = "http://localhost:8000/api/v1"
@@ -19,18 +18,23 @@ SAMPLE_TX = {
     "city_pop": 8000000,
     "dob": "1990-01-01",
     "gender": "M",
-    "job": "engineer"
+    "job": "engineer",
 }
 
-def test_rate_limit():
-    print("Starting Rate Limit Test...")
-    print("Sending 12 requests in rapid succession (Limit is 10/min)...")
-    
+
+def run_rate_limit_smoke_test():
+    """
+    Manual smoke test for live rate limiting against a running local server.
+    This is intentionally not a pytest test because it depends on external services.
+    """
+    print("Starting Rate Limit Smoke Test...")
+    print("Sending 12 requests in rapid succession (limit is 10 per 60 seconds)...")
+
     for i in range(1, 13):
         try:
             response = requests.post(f"{BASE_URL}/predict", json=SAMPLE_TX)
             status = response.status_code
-            
+
             if status == 200:
                 print(f"Request {i}: Success (200)")
             elif status == 429:
@@ -44,5 +48,6 @@ def test_rate_limit():
             print(f"Request {i}: Failed to connect. Is the server running? Error: {e}")
             break
 
+
 if __name__ == "__main__":
-    test_rate_limit()
+    run_rate_limit_smoke_test()
