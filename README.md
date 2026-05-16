@@ -171,15 +171,6 @@ This is the backend flow the app follows:
 6. Predictions and review cases are stored in Postgres
 7. High-risk cases can be reviewed by the agent and then resolved by a human
 
-## Why Redis is here
-
-Redis is doing two useful jobs in this project:
-
-- **Deduplication:** If the exact same transaction gets sent again, Redis helps skip repeated work and return the already-saved record faster.
-- **Rate limiting:** The API uses a sliding-window limiter to stop one client from spamming the scoring endpoint too fast.
-
-I kept both because I wanted this to feel closer to a real AI fraud system, not just a model demo.
-
 ## Review flow
 
 This is the part that makes the system more useful than a plain fraud score.
