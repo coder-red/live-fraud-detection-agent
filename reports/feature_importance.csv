@@ -1,0 +1,11 @@
+feature,importance
+category,0.3135966
+amt,0.29904905
+hour,0.21610782
+age,0.04940562
+gender,0.046308115
+state,0.029622622
+city_pop,0.019649932
+day_of_week,0.015680343
+dist_to_merchant,0.010579872
+is_weekend,0.0

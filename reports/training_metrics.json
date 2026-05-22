@@ -1,0 +1,55 @@
+{
+  "data_source": "C:\\Users\\hp\\Fraud\\data\\fraudTrain.csv",
+  "train_rows": 500000,
+  "serving_threshold": 0.5221,
+  "best_f1_threshold": 0.5221469402313232,
+  "best_f1_score": 0.8738738738243298,
+  "roc_auc": 0.998740500135561,
+  "confusion_matrix": [
+    [
+      99375,
+      17
+    ],
+    [
+      123,
+      485
+    ]
+  ],
+  "classification_report": {
+    "0": {
+      "precision": 0.9987637942471206,
+      "recall": 0.9998289600772698,
+      "f1-score": 0.9992960933179145,
+      "support": 99392.0
+    },
+    "1": {
+      "precision": 0.9661354581673307,
+      "recall": 0.7976973684210527,
+      "f1-score": 0.8738738738738738,
+      "support": 608.0
+    },
+    "accuracy": 0.9986,
+    "macro avg": {
+      "precision": 0.9824496262072256,
+      "recall": 0.8987631642491613,
+      "f1-score": 0.9365849835958941,
+      "support": 100000.0
+    },
+    "weighted avg": {
+      "precision": 0.9985654139637555,
+      "recall": 0.9986,
+      "f1-score": 0.9985335262236946,
+      "support": 100000.0
+    }
+  },
+  "model_params": {
+    "n_estimators": 500,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "tree_method": "hist",
+    "enable_categorical": true,
+    "use_label_encoder": false,
+    "eval_metric": "aucpr",
+    "random_state": 42
+  }
+}
