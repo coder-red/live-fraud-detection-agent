@@ -2,9 +2,13 @@ import json
 import os
 from functools import lru_cache
 from typing import Any, Literal
+from dotenv import load_dotenv
+
+load_dotenv() # Ensure LangSmith/Groq env vars are loaded
 
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field, ValidationError
+from langsmith import traceable
 
 
 Recommendation = Literal["APPROVE", "REVIEW", "BLOCK"]
@@ -106,6 +110,7 @@ def _query_db_tools(db: Any, transaction: dict) -> dict:
         return {}
 
 
+@traceable(name="Fraud Agent Reasoning")
 def generate_agent_review(
     transaction: dict, 
     probability: float, 

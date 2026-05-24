@@ -3,7 +3,9 @@ from datetime import datetime, timedelta
 from math import radians, sin, cos, sqrt, atan2
 from sqlalchemy.orm import Session
 from app.db.models import FraudPrediction
+from langsmith import traceable
 
+@traceable(name="DB: Merchant Fraud History")
 def check_merchant_fraud_history(db: Session, merchant: str) -> dict:
     """How risky is this merchant based on past transactions?"""
     total = db.query(FraudPrediction).filter(
@@ -24,6 +26,7 @@ def check_merchant_fraud_history(db: Session, merchant: str) -> dict:
     }
 
 
+@traceable(name="DB: Transaction Velocity Check")
 def check_velocity(db: Session, city: str, state: str, window_minutes: int = 60) -> dict:
     """How many transactions from this location in the last N minutes?"""
     since = datetime.utcnow() - timedelta(minutes=window_minutes)
@@ -42,6 +45,7 @@ def check_velocity(db: Session, city: str, state: str, window_minutes: int = 60)
     }
 
 
+@traceable(name="DB: Geographic Anomaly Check")
 def check_geo_anomaly(db: Session, merchant: str, merch_lat: float, merch_long: float) -> dict:
     """Is this merchant location consistent with where it's been seen before?"""
     prior = db.query(FraudPrediction).filter(

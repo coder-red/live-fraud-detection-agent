@@ -30,7 +30,7 @@ def run_rate_limit_smoke_test():
     print("Starting Rate Limit Smoke Test...")
     print("Sending 12 requests in rapid succession (limit is 10 per 60 seconds)...")
 
-    for i in range(1, 13):
+    for i in range(1, 105):
         try:
             response = requests.post(f"{BASE_URL}/predict", json=SAMPLE_TX)
             status = response.status_code

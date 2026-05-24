@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from dotenv import load_dotenv
+load_dotenv() # Load env vars early for tracing and config
+
 from app.routes import router
 from app.db.connections import init_db 
 

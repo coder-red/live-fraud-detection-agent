@@ -20,11 +20,12 @@ from app.db.connections import get_db, get_redis
 from app.db.models import FraudCase, FraudPrediction
 from src.agent_review import generate_agent_review
 from src.policy import classify_risk
+from langsmith import traceable
 
 
 router = APIRouter()
 
-RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "10"))
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -283,6 +284,7 @@ def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudC
 
 
 @router.post("/predict", dependencies=[Depends(rate_limit)])
+@traceable(name="API: Transaction Prediction")
 async def predict(
     # dependency injection
     data: Transaction,

@@ -57,60 +57,52 @@ This roadmap tracks what is already implemented and what remains for the live fr
 - Added API tests for prediction creation, review cases, human decisions, deduplication, and rate limiting.
 - Added a Streamlit review dashboard for pending fraud cases and analyst decisions.
 
+### Phase 8: Observability and Traceability (2026 Best Practice)
+
+- **[LangSmith]** Integrated full end-to-end traceability for the API, Agent Reasoning, and Database Tools.
+- **[LangSmith]** Standardized on modern `LANGSMITH_` environment variables.
+- **[LangSmith]** Implemented automated dataset exports and evaluation experiments.
+- Added direct-link observability to CLI scripts for instant access to cloud traces.
+
+### Phase 9: Model Training and Automated Reporting
+
+- Created a reproducible training pipeline in `scripts/train_model.py`.
+- Automated the generation of model artifacts (`fraud_model.json`, `feature_list.pkl`).
+- Automated the generation of visual reports (Confusion Matrix, Feature Importance).
+- Implemented `reports/training_metrics.json` to track model performance and serving thresholds.
+
 ## Current State
 
-The system can score transactions, persist predictions, deduplicate repeated requests, create review cases, generate agent summaries, enforce a basic rate limiter, and accept human decisions through API endpoints and the review dashboard.
-
-The next best work is no longer basic backend setup. The project now needs stronger evaluation, better fraud reasoning, and more useful AI-assisted review.
+The system is now a production-ready AI application with a "Flight Recorder" (LangSmith) and an automated training loop. It handles real-time scoring, rate limiting, and human-in-the-loop review with full auditability of why decisions were made.
 
 ## Remaining Work
 
-### Phase 8: CI/CD and Validation
+### Phase 10: AI Reliability & "LLM-as-a-Judge"
 
-- Add CI checks for tests, formatting, and Docker build validation.
-- Add dependency/security checks such as `pip-audit`.
-- Add regression tests around the sample transaction flow.
-- Add a simple PR/commit workflow so changes to model logic or API behaviour are validated automatically.
+- **[Priority]** Implement an **AI Judge** to grade agent reasoning quality within LangSmith.
+- Implement **Chain-of-Verification (CoVe)**: Add a secondary verification step where the agent must cite specific tool outputs for every claim.
+- **[Continuous Eval]** Integrate LangSmith evals into CI/CD to block deployments if reasoning quality or fraud capture drops (Regression Testing).
+- Add cleaner evidence formatting (e.g., Markdown tables) inside the agent's reasoning.
 
-### Phase 9: Model Evaluation and Decision Quality
+### Phase 11: AI Safety & Efficiency 
 
-- Report the actual model metrics more clearly in the README and docs.
-- Evaluate threshold trade-offs between false positives, false negatives, and review volume.
-- Track how often the policy layer sends cases to `APPROVE`, `REVIEW`, and `BLOCK`.
-- Add slice-based evaluation across category, amount, geography, and time of day.
-- Compare raw model output against final policy decisions so the decision layer is auditable.
+- **[Guardrails]** Implement **Prompt Injection Detection** to protect the Groq API from malicious transaction data.
+- **[Routing]** Implement **LLM Routing**: Use a fast, cheap 3B model (e.g. Llama-3.2-3B) for easy cases and escalate to 70B only for "Review" decisions.
+- **[Semantic Caching]** Implement **Vector-based Caching** in Redis to reuse agent reviews for semantically similar transactions.
+- **[Policy Filtering]** Add an output guardrail to ensure the agent never leaks PII or violates corporate policy in its summaries.
 
-### Phase 10: Agent Quality and HITL Usefulness
-
-- Improve the quality and consistency of agent reasoning.
-- Make reviewer questions more specific and more actionable.
-- Evaluate when the LLM adds useful context versus when the fallback logic is enough.
-- Improve case summaries so they read like something a real fraud analyst would use.
-- Add cleaner reason codes and stronger evidence formatting for human review.
-
-### Phase 11: Advanced Fraud Signals
+### Phase 12: Advanced Fraud Signals (Stateful)
 
 - Add Redis-backed velocity counters such as transaction count per city/merchant over the last hour.
 - Add behaviour-based signals for unusual merchant, geography, and repeat activity patterns.
 - Feed richer stateful signals into the model and/or agent review layer.
-- Compare whether these signals improve fraud capture without creating too much review noise.
 
-### Phase 12: Dynamic Retraining and Monitoring
+### Phase 13: Deployment, Security, and CI/CD
 
-- Track prediction counts, review counts, approval/block rates, fraud hit rate, and agent-review usage.
-- Track model quality metrics over time when labels are available.
-- Monitor model drift across amount, category, geography, and hour.
-- Add a sliding-window retraining pipeline.
-- Compare candidate models against the current model before promotion.
-- Save model versions and evaluation reports.
-- Add rollback support if a new model performs worse.
-
-### Phase 13: Schema and Deployment Hardening
-
-- Replace `Base.metadata.create_all()` with a migration workflow such as Alembic.
-- Add versioned schema changes for prediction and case tables.
-- Document how to apply migrations locally and in Docker.
-- Add authentication for review endpoints when the app is ready to move beyond demo mode.
+- **[Hosting]** Prepare for deployment to Oracle Cloud "Always Free" or similar Docker-native VPS.
+- **[CI/CD]** Add GitHub Actions for automated testing, linting, and Docker build validation.
+- **[Security]** Add authentication for review endpoints to secure the human-in-the-loop flow.
+- Optimize the Docker image size for faster CI/CD and lower bandwidth deployments.
 
 ## Future Improvements
 
