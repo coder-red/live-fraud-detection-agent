@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import pandas as pd
 import seaborn as sns
 
@@ -48,6 +49,17 @@ def save_target_distribution(df: pd.DataFrame) -> dict:
     plt.savefig(ASSETS_DIR / "target.png", dpi=150)
     plt.close()
 
+    # Print clean stats to terminal
+    print("=" * 50)
+    print("FRAUD STATISTICS")
+    print("=" * 50)
+    print(f"Total Transactions: {len(df):,}")
+    print(f"Legitimate: {fraud_counts.get(0, 0):,} ({fraud_pct.get(0, 0.0):.2f}%)")
+    print(f"Fraudulent: {fraud_counts.get(1, 0):,} ({fraud_pct.get(1, 0.0):.2f}%)")
+    if fraud_pct.get(1, 0) > 0:
+        print(f"Fraud Rate: 1 in {int(100/fraud_pct[1])} transactions")
+    print("=" * 50)
+
     return {
         "total_transactions": int(len(df)),
         "legitimate_count": int(fraud_counts.get(0, 0)),
@@ -68,6 +80,32 @@ def save_hourly_fraud_chart(df: pd.DataFrame) -> None:
     plt.tight_layout()
     plt.savefig(ASSETS_DIR / "fraud_by_hour.png", dpi=150)
     plt.close()
+
+
+def save_amount_distribution(df: pd.DataFrame) -> None:
+    """Save distribution of transaction amounts with log scale for visibility."""
+    plt.figure(figsize=(10, 6))
+    ax = sns.boxplot(x="is_fraud", y="amt", data=df, palette="Set2")
+    ax.set_yscale("log")
+
+    # Format Y-axis labels as currency
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
+    ax.yaxis.get_major_formatter().set_scientific(False)
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("$%d"))
+
+    plt.title("Distribution of Transaction Amounts (Log Scale)", fontsize=14)
+    plt.xlabel("Is Fraud?", fontsize=12)
+    plt.ylabel("Amount (USD)", fontsize=12)
+    plt.tight_layout()
+    plt.savefig(ASSETS_DIR / "amount_distribution.png", dpi=150)
+    plt.close()
+
+    # Print medians to terminal
+    med_fraud = df[df["is_fraud"] == 1]["amt"].median()
+    med_legit = df[df["is_fraud"] == 0]["amt"].median()
+    print(f"Median Fraud Amt: ${med_fraud:,.2f}")
+    print(f"Median Legit Amt: ${med_legit:,.2f}")
+    print("-" * 50)
 
 
 def save_category_fraud_chart(df: pd.DataFrame) -> list[dict]:
@@ -121,6 +159,7 @@ def main() -> None:
 
     df = load_data()
     save_target_distribution(df)
+    save_amount_distribution(df)
     save_hourly_fraud_chart(df)
     save_category_fraud_chart(df)
     save_density_heatmap(df)

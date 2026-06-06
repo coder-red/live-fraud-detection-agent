@@ -117,6 +117,7 @@ def anyio_backend():
 async def api_client(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{db_path}")
+    monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "10")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
     for module_name in [

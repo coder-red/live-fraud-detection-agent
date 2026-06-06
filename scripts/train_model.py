@@ -156,6 +156,14 @@ def main() -> None:
     save_feature_importance(model, list(X_train.columns))
     save_reports(probs, y_test, preds, best_threshold, best_f1)
 
+    # Print summary metrics to terminal (2026 AI Engr Practice)
+    print("\n" + "=" * 50)
+    print(f"ROC-AUC Score: {roc_auc_score(y_test, probs):.4f}")
+    print("=" * 50)
+    from sklearn.metrics import classification_report
+    print(classification_report(y_test, preds, digits=4))
+    print("=" * 50)
+
     print(f"Saved model artifacts to {MODEL_DIR}")
     print(f"Saved charts to {ASSETS_DIR}")
     print(f"Saved reports to {REPORTS_DIR}")

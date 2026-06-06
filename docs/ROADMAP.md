@@ -60,7 +60,6 @@ This roadmap tracks what is already implemented and what remains for the live fr
 ### Phase 8: Observability and Traceability (2026 Best Practice)
 
 - **[LangSmith]** Integrated full end-to-end traceability for the API, Agent Reasoning, and Database Tools.
-- **[LangSmith]** Standardized on modern `LANGSMITH_` environment variables.
 - **[LangSmith]** Implemented automated dataset exports and evaluation experiments.
 - Added direct-link observability to CLI scripts for instant access to cloud traces.
 
@@ -88,18 +87,11 @@ The system is now a production-ready AI application with a "Flight Recorder" (La
 
 - **[Guardrails]** Implement **Prompt Injection Detection** to protect the Groq API from malicious transaction data.
 - **[Routing]** Implement **LLM Routing**: Use a fast, cheap 3B model (e.g. Llama-3.2-3B) for easy cases and escalate to 70B only for "Review" decisions.
-- **[Semantic Caching]** Implement **Vector-based Caching** in Redis to reuse agent reviews for semantically similar transactions.
 - **[Policy Filtering]** Add an output guardrail to ensure the agent never leaks PII or violates corporate policy in its summaries.
 
-### Phase 12: Advanced Fraud Signals (Stateful)
+### Phase 12: Deployment, Security, and CI/CD
 
-- Add Redis-backed velocity counters such as transaction count per city/merchant over the last hour.
-- Add behaviour-based signals for unusual merchant, geography, and repeat activity patterns.
-- Feed richer stateful signals into the model and/or agent review layer.
-
-### Phase 13: Deployment, Security, and CI/CD
-
-- **[Hosting]** Prepare for deployment to Oracle Cloud "Always Free" or similar Docker-native VPS.
+- **[Hosting]** Prepare for deployment to Oracle Cloud or similar Docker-native VPS.
 - **[CI/CD]** Add GitHub Actions for automated testing, linting, and Docker build validation.
 - **[Security]** Add authentication for review endpoints to secure the human-in-the-loop flow.
 - Optimize the Docker image size for faster CI/CD and lower bandwidth deployments.
@@ -108,4 +100,3 @@ The system is now a production-ready AI application with a "Flight Recorder" (La
 
 - Add request logging and structured application logs.
 - Add OpenAPI examples directly to FastAPI schemas.
-- Add a proper deployment edge layer such as Nginx only when the app needs a more realistic hosting setup.
