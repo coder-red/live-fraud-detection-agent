@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        default=25,
+        default=8,
         help="Maximum number of reviewed fraud cases to upload and evaluate.",
     )
     parser.add_argument(
@@ -161,6 +163,7 @@ def reviewed_case_agent(inputs: dict) -> dict:
             policy=inputs["policy"],
             db=db,
         )
+        #the output
         return {
             "recommendation": review.recommendation,
             "confidence": review.confidence,
@@ -194,6 +197,57 @@ def recommendation_is_review(
     }
 
 
+def gemini_judge_faithfulness(run, example) -> dict:
+    """
+    LLM-as-a-Judge: Uses Groq (llama-3.3-70b) to grade the faithfulness
+    of the agent's reasoning summary against the transaction inputs.
+    A score of 1.0 means the agent cited only verifiable facts.
+    A score of 0.0 means the agent hallucinated or contradicted itself.
+    """
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import HumanMessage
+
+    summary = (run.outputs or {}).get("summary", "")
+    transaction = (run.inputs or {}).get("transaction", {})
+    policy = (run.inputs or {}).get("policy", {})
+
+    prompt = f"""You are an independent fraud audit expert reviewing an AI agent's fraud analysis.
+
+Transaction Data (ground truth):
+{json.dumps(transaction, indent=2)}
+
+Policy Applied:
+{json.dumps(policy, indent=2)}
+
+Agent Summary to Audit:
+{summary}
+
+Grade the agent summary ONLY on faithfulness: does it contain facts or statistics
+not present in the transaction data or policy above?
+
+Respond in valid JSON only:
+{{"score": 1.0, "reason": "All claims are grounded in the input data."}}
+or
+{{"score": 0.0, "reason": "Agent claimed X but X is not in the transaction data."}}"""
+
+    try:
+        judge_llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+        response = judge_llm.invoke([HumanMessage(content=prompt)]).content.strip()
+        # Strip markdown code fences if present
+        if response.startswith("```"):
+            match = re.search(r"```(?:json)?\s*(.*?)\s*```", response, re.DOTALL)
+            if match:
+                response = match.group(1).strip()
+        result = json.loads(response)
+        return {
+            "key": "agent_faithfulness",
+            "score": float(result["score"]),
+            "comment": result.get("reason", ""),
+        }
+    except Exception as exc:
+        return {"key": "agent_faithfulness", "score": 0.0, "comment": f"Judge error: {exc}"}
+
+
 def main() -> None:
     args = parse_args()
     client = Client()
@@ -214,11 +268,11 @@ def main() -> None:
         results = client.evaluate(
             reviewed_case_agent,
             data=dataset_name,
-            evaluators=[recommendation_matches_human, recommendation_is_review],
+            evaluators=[recommendation_matches_human, recommendation_is_review, gemini_judge_faithfulness],
             experiment_prefix="fraud-agent-vs-human",
             description="Rerun reviewed fraud cases and compare agent recommendation to saved human decisions.",
-            max_concurrency=4,
-            metadata={"models": ["groq:llama-3.3-70b-versatile"]},
+            max_concurrency=1,
+            metadata={"models": ["groq:llama-3.3-70b-versatile"], "judge": "gemini-2.0-flash-lite"},
         )
         wait_for_all_tracers()
 

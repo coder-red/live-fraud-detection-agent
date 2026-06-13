@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.129.0",
     "joblib>=1.5.3",
     "langchain>=1.2.10",
+    "langchain-google-genai>=4.2.4",
     "langchain-groq>=1.1.2",
     "langgraph>=1.0.8",
     "langsmith>=0.7.4",

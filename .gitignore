@@ -16,3 +16,4 @@ data/*
 .venv
 postgres_data/
 pgdata/
+.aider*
