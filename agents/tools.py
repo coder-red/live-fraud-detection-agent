@@ -14,7 +14,7 @@ def check_merchant_fraud_history(db: Session, merchant: str) -> dict:
     
     fraud_count = db.query(FraudPrediction).filter(
         FraudPrediction.merchant == merchant,
-        FraudPrediction.is_fraud == True
+        FraudPrediction.is_fraud
     ).count()
     
     rate = (fraud_count / total * 100) if total > 0 else 0

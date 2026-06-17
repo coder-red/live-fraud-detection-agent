@@ -158,7 +158,7 @@ if st.button("▶  Score all transactions", key="run_simulation"):
         df      = pd.DataFrame(results)
         total   = len(df)
         auto_ok = len(df[df["decision"] == "APPROVE"])
-        flagged = len(df[df["requires_review"] == True])
+        flagged = len(df[df["requires_review"]])
         blocked = len(df[df["decision"] == "BLOCK"])
         avg_lat = sum(latencies) / len(latencies) if latencies else 0
         st.session_state["sim_results"] = {

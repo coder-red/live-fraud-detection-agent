@@ -34,9 +34,20 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
+[tool.ruff]
+exclude = [
+    "notebooks",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "E402",
+]
+
 [dependency-groups]
 dev = [
     "pip-audit>=2.10.0",
     "pytest>=9.0.3",
+    "ruff>=0.12.5",
     "safety>=3.7.0",
 ]

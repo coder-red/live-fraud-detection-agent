@@ -55,6 +55,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only create the LangSmith dataset, do not run the eval experiment.",
     )
+    parser.add_argument(
+        "--min-human-match",
+        type=float,
+        default=0.75,
+        help="Minimum exact-match score required to pass the gate.",
+    )
+    parser.add_argument(
+        "--min-faithfulness",
+        type=float,
+        default=0.90,
+        help="Minimum CoVe faithfulness score required to pass the gate.",
+    )
     return parser.parse_args()
 
 
@@ -170,6 +182,10 @@ def reviewed_case_agent(inputs: dict) -> dict:
             "reason_codes": review.reason_codes,
             "summary": review.summary,
             "reviewer_questions": review.reviewer_questions,
+            # Keep the deterministic evidence bundle in the trace so the judge
+            # can audit the summary against the same DB-backed context.
+            "evidence": [item.model_dump() for item in review.evidence],
+            "verification_context": review.verification_context,
         }
     finally:
         db.close()
@@ -197,12 +213,11 @@ def recommendation_is_review(
     }
 
 
-def gemini_judge_faithfulness(run, example) -> dict:
+def cove_judge_faithfulness(run, example) -> dict:
     """
-    LLM-as-a-Judge: Uses Groq (llama-3.3-70b) to grade the faithfulness
-    of the agent's reasoning summary against the transaction inputs.
-    A score of 1.0 means the agent cited only verifiable facts.
-    A score of 0.0 means the agent hallucinated or contradicted itself.
+    CoVe-aware LLM judge: uses the same verification bundle the agent saw.
+    A score of 1.0 means the summary is grounded in the transaction, policy,
+    and evidence bundle. A score of 0.0 means it makes unsupported claims.
     """
     from langchain_groq import ChatGroq
     from langchain_core.messages import HumanMessage
@@ -210,6 +225,18 @@ def gemini_judge_faithfulness(run, example) -> dict:
     summary = (run.outputs or {}).get("summary", "")
     transaction = (run.inputs or {}).get("transaction", {})
     policy = (run.inputs or {}).get("policy", {})
+    verification_context = (run.outputs or {}).get("verification_context", {})
+    evidence_bundle = verification_context.get("evidence") or (run.outputs or {}).get("evidence", [])
+    db_context = verification_context.get("db_context", {})
+
+    # If the trace has no evidence bundle, fail closed instead of pretending
+    # the judge can verify DB-backed claims from the summary alone.
+    if not evidence_bundle:
+        return {
+            "key": "agent_faithfulness",
+            "score": 0.0,
+            "comment": "Missing verification context; cannot verify DB-backed claims.",
+        }
 
     prompt = f"""You are an independent fraud audit expert reviewing an AI agent's fraud analysis.
 
@@ -219,16 +246,25 @@ Transaction Data (ground truth):
 Policy Applied:
 {json.dumps(policy, indent=2)}
 
+Verification Context:
+{json.dumps(verification_context, indent=2)}
+
+DB Context:
+{json.dumps(db_context, indent=2)}
+
+Evidence Bundle:
+{json.dumps(evidence_bundle, indent=2)}
+
 Agent Summary to Audit:
 {summary}
 
 Grade the agent summary ONLY on faithfulness: does it contain facts or statistics
-not present in the transaction data or policy above?
+not supported by the transaction, policy, or evidence bundle above?
 
 Respond in valid JSON only:
 {{"score": 1.0, "reason": "All claims are grounded in the input data."}}
 or
-{{"score": 0.0, "reason": "Agent claimed X but X is not in the transaction data."}}"""
+{{"score": 0.0, "reason": "Agent claimed X but X is not supported by the evidence bundle."}}"""
 
     try:
         judge_llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
@@ -248,6 +284,31 @@ or
         return {"key": "agent_faithfulness", "score": 0.0, "comment": f"Judge error: {exc}"}
 
 
+def _coerce_numeric_score(value: object) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _collect_metrics(results) -> dict[str, float]:
+    totals: dict[str, list[float]] = {}
+
+    for row in results:
+        for item in row["evaluation_results"]["results"]:
+            score = _coerce_numeric_score(item.get("score"))
+            if score is None:
+                continue
+            totals.setdefault(item["key"], []).append(score)
+
+    return {
+        key: (sum(values) / len(values))
+        for key, values in totals.items()
+        if values
+    }
+
+
 def main() -> None:
     args = parse_args()
     client = Client()
@@ -264,23 +325,56 @@ def main() -> None:
 
     # Exact-match is the first useful metric for this repo. LangSmith will
     # store per-example traces so you can inspect where and why the agent fails.
-    with tracing_context(enabled=True, project_name="fraudeval"):
+    with tracing_context(enabled=True, project_name=project_name):
         results = client.evaluate(
             reviewed_case_agent,
             data=dataset_name,
-            evaluators=[recommendation_matches_human, recommendation_is_review, gemini_judge_faithfulness],
+            evaluators=[recommendation_matches_human, recommendation_is_review, cove_judge_faithfulness],
             experiment_prefix="fraud-agent-vs-human",
             description="Rerun reviewed fraud cases and compare agent recommendation to saved human decisions.",
             max_concurrency=1,
-            metadata={"models": ["groq:llama-3.3-70b-versatile"], "judge": "gemini-2.0-flash-lite"},
+            metadata={"models": ["groq:llama-3.3-70b-versatile"], "judge": "groq:llama-3.3-70b-versatile"},
         )
         wait_for_all_tracers()
 
+    metrics = _collect_metrics(results)
     print(f"Started LangSmith eval for dataset: {dataset_name}")
     print(f"LangSmith project: {project_name}")
     experiment_name = getattr(results, "experiment_name", None)
     if experiment_name:
         print(f"Experiment: {experiment_name}")
+
+    print("\n[LangSmith] Aggregate scores:")
+    for key, value in sorted(metrics.items()):
+        print(f"[LangSmith] {key}: {value:.3f}")
+
+    failures: list[str] = []
+    human_match = metrics.get("recommendation_matches_human")
+    if human_match is None:
+        failures.append("Missing recommendation_matches_human score.")
+    elif human_match < args.min_human_match:
+        failures.append(
+            f"recommendation_matches_human={human_match:.3f} < {args.min_human_match:.3f}"
+        )
+
+    faithfulness = metrics.get("agent_faithfulness")
+    if faithfulness is None:
+        failures.append("Missing agent_faithfulness score.")
+    elif faithfulness < args.min_faithfulness:
+        failures.append(
+            f"agent_faithfulness={faithfulness:.3f} < {args.min_faithfulness:.3f}"
+        )
+
+    if failures:
+        raise SystemExit(
+            "LangSmith eval gate failed:\n- " + "\n- ".join(failures)
+        )
+
+    print(
+        "\n[LangSmith] Eval gate passed "
+        f"(human_match >= {args.min_human_match:.2f}, "
+        f"faithfulness >= {args.min_faithfulness:.2f})."
+    )
 
 
 if __name__ == "__main__":

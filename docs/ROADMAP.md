@@ -72,20 +72,27 @@ This roadmap tracks what is already implemented and what remains for the live fr
 
 ## Current State
 
-The system is now a production-ready AI application with a "Flight Recorder" (LangSmith) and an automated training loop. It handles real-time scoring, rate limiting, and human-in-the-loop review with full auditability of why decisions were made.
+The project is now a feature-complete local-first AI application with real-time scoring, deterministic policy enforcement, PostgreSQL persistence, Redis-backed deduplication and rate limiting, human-in-the-loop case management, LangSmith tracing/evals, and a reproducible training/reporting pipeline.
+
+The LLM judge now consumes a deterministic CoVe verification bundle, so DB-backed claims are checked against the same evidence the agent saw.
+
+It is still not fully production-hardened. Authentication, database migrations, CI/CD, prompt-injection defenses, and deployment hardening are still open.
 
 ## Remaining Work
 
-### Phase 10: AI Reliability & "LLM-as-a-Judge"
+### Phase 10: AI Reliability & "LLM-as-a-Judge" (Partially Complete)
 
-- **[Priority]** Implement an **AI Judge** to grade agent reasoning quality within LangSmith.
-- Implement **Chain-of-Verification (CoVe)**: Add a secondary verification step where the agent must cite specific tool outputs for every claim.
-- **[Continuous Eval]** Integrate LangSmith evals into CI/CD to block deployments if reasoning quality or fraud capture drops (Regression Testing).
-- Add cleaner evidence formatting (e.g., Markdown tables) inside the agent's reasoning.
+- **[Done]** Implemented a **CoVe verification bundle** in `src/agent_review.py` so reviews carry deterministic evidence from the transaction, policy, and DB tools.
+- **[Done]** Updated the **LLM-as-a-Judge** evaluator in `evals/langsmith_eval.py` to score summaries against the shared verification bundle instead of the summary text alone.
+- **[Done]** Added a GitHub Actions CI/CD workflow that runs tests, validates the Docker build, and exposes a manual LangSmith eval gate for Phase 10.
+- **[Done]** Tightened the LangSmith eval gate so it can block `main` automatically when the required secrets and reviewed-case data are available in CI.
+- **[Done]** Added a dependency security scan to the CI pipeline so known vulnerable packages fail the release path early.
+- **[Done]** Added explicit LangSmith score thresholds so the eval job fails if human match or faithfulness falls below the gate.
+- **[Done]** Added cleaner evidence formatting, including a markdown decision summary and evidence table, inside the agent's reasoning.
 
 ### Phase 11: AI Safety & Efficiency 
 
-- **[Guardrails]** Implement **Prompt Injection Detection** to protect the Groq API from malicious transaction data.
+- **[Guardrails,Done]** Implemented **Prompt Injection Detection** to protect the Groq API from malicious transaction data by redacting suspicious instruction-like content before model invocation.
 - **[Routing]** Implement **LLM Routing**: Use a fast, cheap 3B model (e.g. Llama-3.2-3B) for easy cases and escalate to 70B only for "Review" decisions.
 - **[Policy Filtering]** Add an output guardrail to ensure the agent never leaks PII or violates corporate policy in its summaries.
 
@@ -100,3 +107,4 @@ The system is now a production-ready AI application with a "Flight Recorder" (La
 
 - Add request logging and structured application logs.
 - Add OpenAPI examples directly to FastAPI schemas.
+- Add Kafka-based event ingestion so transaction scoring can move from direct API requests to an async pipeline.

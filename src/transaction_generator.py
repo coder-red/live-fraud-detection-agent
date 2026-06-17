@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta
-from typing import Literal
 
 # ── Geographic templates ─────────────────────────────────────────────────────
 # Reusable across simulation runs so DB tools return meaningful data
