@@ -34,7 +34,7 @@ st.markdown("""
 def get_data(endpoint):
     url = f"{API_BASE_URL}/{endpoint}" if endpoint else f"{API_BASE_URL}/"
     try:
-        r = requests.get(url, timeout=3)
+        r = requests.get(url, timeout=15)
         if r.status_code == 200:
             return r.json()
         if r.status_code == 404:
@@ -45,7 +45,7 @@ def get_data(endpoint):
 
 def post_data(endpoint, payload):
     try:
-        r = requests.post(f"{API_BASE_URL}/{endpoint}", json=payload, timeout=5)
+        r = requests.post(f"{API_BASE_URL}/{endpoint}", json=payload, timeout=15)
         return r.status_code == 200
     except requests.RequestException:
         return False
@@ -83,15 +83,21 @@ def get_predictions():
 @st.cache_data(ttl=60)
 def get_health():
     try:
-        r = requests.get(f"{API_ROOT_URL}/", timeout=3)
+        r = requests.get(f"{API_ROOT_URL}/", timeout=30)
         return r.json() if r.status_code == 200 else None
     except requests.RequestException:
         return None
 
-# --- Connection check ---
+# --- Connection check (retry for cold starts) ---
 
 health = get_health()
 if not health:
+    with st.spinner("Waking up the API (cold start)..."):
+        for _ in range(6):
+            time.sleep(5)
+            health = get_health()
+            if health:
+                st.rerun()
     st.error(f"Connection Error: Could not reach API at {API_BASE_URL}")
     st.stop()
 
