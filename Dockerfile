@@ -24,9 +24,10 @@ WORKDIR /app
 RUN groupadd --gid 1000 appgroup && \
     useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
 
-# Copy Python environment and installed packages from builder
+# Copy Python environment, installed packages, and uv from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/ /app/
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
