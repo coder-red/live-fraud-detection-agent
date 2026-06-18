@@ -93,27 +93,22 @@ It is still not fully production-hardened. Authentication, database migrations, 
 ### Phase 11: AI Safety & Efficiency 
 
 - **[Guardrails,Done]** Implemented **Prompt Injection Detection** to protect the Groq API from malicious transaction data by redacting suspicious instruction-like content before model invocation.
-- **[Routing]** Implement **LLM Routing**: Use a fast, cheap 3B model (e.g. Llama-3.2-3B) for easy cases and escalate to 70B only for "Review" decisions.
+- **[Skipped]** LLM Routing is intentionally deferred for now because the deterministic fallback and current agent path are already sufficient for this portfolio build.
 - **[Policy Filtering]** Add an output guardrail to ensure the agent never leaks PII or violates corporate policy in its summaries.
 
 ### Phase 12: Deployment, Security, and CI/CD
 
 - **[Hosting]** Prepare for deployment to Oracle Cloud or similar Docker-native VPS.
 - **[CI/CD]** Add GitHub Actions for automated testing, linting, and Docker build validation.
-- **[Security]** Add authentication for review endpoints to secure the human-in-the-loop flow.
 - Optimize the Docker image size for faster CI/CD and lower bandwidth deployments.
 
 ### Phase 13: Dashboard Polish (Senior Portfolio Quality)
 
-- **[Real-time]** Replace manual refresh with Server-Sent Events or WebSocket for live streaming updates to the review queue and metrics.
-- **[Charts]** Add fraud trend line charts (time-series), category distribution bar charts, risk band pie charts, and a latency histogram.
-- **[Filters]** Add date range picker, category/risk band dropdowns, amount slider, and search-by-merchant to the activity history.
-- **[Pagination]** Implement server-side pagination on activity history instead of a fixed 50-row cut-off.
-- **[Export]** Add CSV export for simulation results, activity history, and pending cases.
-- **[Auth]** Add a lightweight login flow (API key or magic link) so reviewer actions are tied to an identity and auditable.
-- **[UX]** Add loading skeletons, retry logic on API failures, toast notifications for decisions, and a last-refreshed timestamp.
-- **[Responsive]** Ensure the layout degrades gracefully on tablet and mobile screens.
-- **[Theme]** Add a light/dark mode toggle persisted in `session_state`.
+- **[Done] Charts** — Added 5 interactive Plotly chart tabs (Risk Distribution, Decisions, Categories, Amounts, Latency) with dark theme, zoom, and hover.
+- **[Done] Cold start** — Increased API timeouts, added retry spinner, and GHA keep-alive ping every 14 min to prevent Render spin-down.
+- **[Live Feed]** Replace manual refresh with Server-Sent Events (SSE): API streams new predictions to a live activity feed that auto-updates the queue and metrics.
+- **[Filters]** Add date range picker, category/risk band dropdowns, amount slider, and merchant search to the activity history.
+- **[Pagination]** Add server-side pagination (`offset` + `limit`) to the predictions endpoint with a "Load more" or page selector in the dashboard.
 
 ## Future Improvements
 
