@@ -103,6 +103,24 @@ It is still not fully production-hardened. Authentication, database migrations, 
 - **[Security]** Add authentication for review endpoints to secure the human-in-the-loop flow.
 - Optimize the Docker image size for faster CI/CD and lower bandwidth deployments.
 
+### Phase 13: Custom Domain & Cloudflare
+
+- **[Domain]** Set up a custom domain via Cloudflare (e.g., `fraud.yourdomain.com`) for both the API and dashboard.
+- **[DNS]** Configure Cloudflare DNS, SSL/TLS, and caching for Render-hosted services.
+- **[WAF]** Add Cloudflare WAF rules to protect API endpoints from abuse.
+
+### Phase 14: Dashboard Polish (Senior Portfolio Quality)
+
+- **[Real-time]** Replace manual refresh with Server-Sent Events or WebSocket for live streaming updates to the review queue and metrics.
+- **[Charts]** Add fraud trend line charts (time-series), category distribution bar charts, risk band pie charts, and a latency histogram.
+- **[Filters]** Add date range picker, category/risk band dropdowns, amount slider, and search-by-merchant to the activity history.
+- **[Pagination]** Implement server-side pagination on activity history instead of a fixed 50-row cut-off.
+- **[Export]** Add CSV export for simulation results, activity history, and pending cases.
+- **[Auth]** Add a lightweight login flow (API key or magic link) so reviewer actions are tied to an identity and auditable.
+- **[UX]** Add loading skeletons, retry logic on API failures, toast notifications for decisions, and a last-refreshed timestamp.
+- **[Responsive]** Ensure the layout degrades gracefully on tablet and mobile screens.
+- **[Theme]** Add a light/dark mode toggle persisted in `session_state`.
+
 ## Future Improvements
 
 - Add request logging and structured application logs.
