@@ -105,18 +105,19 @@ if not health:
 # --- Sidebar ---
 
 with st.sidebar:
-    st.markdown("### Live Feed")
+    st.markdown("## Fraud Console")
+    st.divider()
+    st.markdown("### Live")
     st.checkbox(
-        "🔴 Live auto-refresh",
+        "Live auto-refresh (10s)",
         value=st.session_state.get("live_mode", False),
         key="live_mode",
-        help="Polls /api/v1/stream every 5 seconds for new predictions.",
+        help="SSE live feed + periodic chart refresh.",
     )
-    st.caption("Refreshes the dashboard automatically when new predictions arrive.")
     st.divider()
     st.markdown("### Connection")
-    api_status = "🟢 Connected" if health else "🔴 Disconnected"
-    st.markdown(f"**API:** {api_status}")
+    api_status = "Connected" if health else "Disconnected"
+    st.markdown(f"**Status:** {api_status}")
     custom_url = st.text_input(
         "API URL",
         value=st.session_state.get("_custom_api_url", ""),
@@ -127,41 +128,108 @@ with st.sidebar:
         st.session_state["_custom_api_url"] = custom_url
         st.rerun()
     st.divider()
-    if st.button("🗑 Clear Cache", use_container_width=True):
+    if st.button("Clear Cache", use_container_width=True):
         st.session_state.pop("sim_results", None)
         get_pending.clear()
         get_predictions.clear()
         st.rerun()
 
 st.markdown("""
-    <style>
-    @import url('https://rsms.me/inter/inter.css');
-    .stApp { background-color: #0e1117; color: #fafafa; font-family: 'Inter', sans-serif; }
-    div[data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        padding: 15px;
-    }
-    .stTextArea textarea {
-        background-color: #0d1117 !important;
-        border: 1px solid #30363d !important;
-        color: #fafafa !important;
-    }
-    .stButton > button { border-radius: 6px; font-weight: 500; }
-    .arch-note { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
-    </style>
+<style>
+@import url('https://rsms.me/inter/inter.css');
+html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif; }
+.stApp { background-color: #0b0d11; color: #e6edf3; }
+.stApp > header { background-color: #0b0d11; border-bottom: 1px solid #21262d; }
+
+/* Metric cards */
+div[data-testid="stMetric"] {
+    background-color: #101318; border: 1px solid #21262d; border-radius: 8px;
+    padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+div[data-testid="stMetric"]:hover { border-color: #30363d; }
+div[data-testid="stMetric"] > div:first-child { font-size: 0.75rem; font-weight: 500; color: #8b949e; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+div[data-testid="stMetric"] > div:nth-child(2) { font-size: 1.5rem; font-weight: 600; color: #e6edf3; line-height: 1.2; }
+div[data-testid="stMetric"] > div:nth-child(3) { font-size: 0.75rem; color: #8b949e; margin-top: 2px; }
+
+/* Buttons */
+.stButton > button {
+    border-radius: 6px; font-weight: 500; font-size: 0.8125rem;
+    border: 1px solid #30363d; background: #21262d; color: #e6edf3;
+    transition: background 0.15s, border-color 0.15s;
+}
+.stButton > button:hover { border-color: #8b949e; background: #30363d; }
+.stButton > button[kind="primary"] { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.stButton > button[kind="primary"]:hover { background: #388bfd; border-color: #388bfd; }
+
+/* Text area / input */
+.stTextArea textarea, .stTextInput input {
+    background-color: #0d1117 !important; border: 1px solid #30363d !important;
+    border-radius: 6px !important; color: #e6edf3 !important; font-size: 0.8125rem !important;
+}
+.stTextArea textarea:focus, .stTextInput input:focus { border-color: #1f6feb !important; box-shadow: 0 0 0 2px rgba(31,111,235,0.3) !important; }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] { gap: 0; border-bottom: 1px solid #21262d; }
+.stTabs [data-baseweb="tab"] {
+    font-size: 0.8125rem; font-weight: 500; color: #8b949e; padding: 8px 16px;
+    border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+}
+.stTabs [data-baseweb="tab"]:hover { color: #e6edf3; }
+.stTabs [aria-selected="true"] { color: #e6edf3; border-bottom-color: #1f6feb; }
+
+/* Dataframe */
+div[data-testid="stDataFrame"] { font-size: 0.8125rem; }
+div[data-testid="stDataFrame"] th { background: #101318; color: #8b949e; font-weight: 500; text-transform: uppercase; font-size: 0.6875rem; letter-spacing: 0.04em; border-bottom: 1px solid #21262d; }
+div[data-testid="stDataFrame"] td { background: transparent; border-bottom: 1px solid #161b22; }
+
+/* Select / dropdown */
+div[data-baseweb="select"] > div { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+div[data-baseweb="select"] > div:hover { border-color: #8b949e; }
+
+/* Expander */
+.streamlit-expanderHeader { font-size: 0.8125rem; font-weight: 500; color: #8b949e; }
+.streamlit-expanderContent { border-top: 1px solid #21262d; }
+
+/* Divider */
+.stDivider { border-color: #21262d; margin: 12px 0; }
+
+/* Caption */
+.stCaption, .arch-note { font-size: 0.75rem; color: #8b949e; }
+
+/* Status badge */
+.status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; }
+.status-badge.live { background: #052e16; color: #22c55e; border: 1px solid #115f26; }
+.status-badge.error { background: #450a0a; color: #ef4444; border: 1px solid #7f1d1d; }
+
+/* Pending banner */
+.pending-banner {
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: #221703; border: 1px solid #78350f; border-radius: 8px;
+    font-size: 0.875rem; color: #fbbf24; margin-bottom: 16px;
+}
+.pending-banner strong { font-weight: 600; }
+
+/* Toolbar */
+.toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+.toolbar-left { display: flex; align-items: center; gap: 16px; }
+.toolbar-right { display: flex; align-items: center; gap: 12px; }
+</style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
+# --- Header / Toolbar ---
 
-col_title, col_refresh = st.columns([5, 1])
-with col_title:
+col_tool = st.columns([1, 1])
+with col_tool[0]:
     st.markdown("## Fraud Detection Console")
-    st.caption("XGBoost · LangGraph HITL · FastAPI  —  real-time transaction scoring + human review queue")
-with col_refresh:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("↺ Refresh", width='stretch'):
+    st.caption("XGBoost · LangGraph HITL · FastAPI")
+with col_tool[1]:
+    st.markdown(
+        f'<div style="display:flex; justify-content:flex-end; align-items:center; gap:12px; height:100%;">'
+        f'<span class="status-badge {"live" if health else "error"}">{"&#9679; Live" if health else "&#9679; Offline"}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Refresh", key="header_refresh", use_container_width=True):
         st.session_state.pop("sim_results", None)
         get_pending.clear()
         get_predictions.clear()
@@ -171,105 +239,100 @@ st.divider()
 
 # --- Simulation ---
 
-st.markdown("### Run Simulation")
-st.markdown(
-    '<p class="arch-note">Production: Kafka consumer → fraud scorer → decision router. '
-    'Demo: direct POST /api/v1/predict — same model, same policy.</p>',
-    unsafe_allow_html=True,
-)
+with st.expander("Run Simulation (50 transactions)", expanded=False):
+    st.markdown(
+        '<p class="arch-note">Posts 50 transactions to /api/v1/predict — same model, same policy as production.</p>',
+        unsafe_allow_html=True,
+    )
 
-if st.button("▶  Score all transactions", key="run_simulation"):
-    payloads = generate_simulation_transactions(count=50, fraud_ratio=0.5)
+    if st.button("▶  Start", key="run_simulation"):
+        payloads = generate_simulation_transactions(count=50, fraud_ratio=0.5)
 
-    if not payloads:
-        st.error("Failed to generate transactions.")
-    else:
-        results  = []
-        latencies = []
-        progress  = st.progress(0, text="Scoring transactions…")
+        if not payloads:
+            st.error("Failed to generate transactions.")
+        else:
+            results  = []
+            latencies = []
+            progress  = st.progress(0, text="Scoring transactions…")
 
-        for i, payload in enumerate(payloads):
-            ok, result, latency_ms = post_predict(payload)
-            latencies.append(latency_ms)
-            if ok and isinstance(result, dict):
-                results.append({
-                    "merchant":        payload.get("merchant", "—"),
-                    "amount":          payload.get("amt", 0),
-                    "decision":        result.get("decision", "—"),
-                    "risk_band":       result.get("risk_band", "—"),
-                    "requires_review": result.get("requires_review", False),
-                    "probability":     result.get("probability", 0),
-                })
-            else:
-                results.append({
-                    "merchant":        payload.get("merchant", "—"),
-                    "amount":          payload.get("amt", 0),
-                    "decision":        "ERROR",
-                    "risk_band":       "—",
-                    "requires_review": False,
-                    "probability":     0,
-                })
-            progress.progress((i + 1) / len(payloads), text=f"Scored {i + 1} / {len(payloads)}")
+            for i, payload in enumerate(payloads):
+                ok, result, latency_ms = post_predict(payload)
+                latencies.append(latency_ms)
+                if ok and isinstance(result, dict):
+                    results.append({
+                        "merchant":        payload.get("merchant", "—"),
+                        "amount":          payload.get("amt", 0),
+                        "decision":        result.get("decision", "—"),
+                        "risk_band":       result.get("risk_band", "—"),
+                        "requires_review": result.get("requires_review", False),
+                        "probability":     result.get("probability", 0),
+                    })
+                else:
+                    results.append({
+                        "merchant":        payload.get("merchant", "—"),
+                        "amount":          payload.get("amt", 0),
+                        "decision":        "ERROR",
+                        "risk_band":       "—",
+                        "requires_review": False,
+                        "probability":     0,
+                    })
+                progress.progress((i + 1) / len(payloads), text=f"Scored {i + 1} / {len(payloads)}")
 
-        progress.empty()
+            progress.empty()
 
-        df      = pd.DataFrame(results)
-        total   = len(df)
-        auto_ok = len(df[df["decision"] == "APPROVE"])
-        flagged = len(df[df["requires_review"]])
-        blocked = len(df[df["decision"] == "BLOCK"])
-        avg_lat = sum(latencies) / len(latencies) if latencies else 0
-        st.session_state["sim_results"] = {
-            "df":        df,
-            "latencies": latencies,
-            "total":     total,
-            "auto_ok":   auto_ok,
-            "flagged":   flagged,
-            "blocked":   blocked,
-            "avg_lat":   avg_lat,
-            "total_ms":  sum(latencies),
-        }
-        get_pending.clear()
-        get_predictions.clear()
-        st.rerun()
+            df      = pd.DataFrame(results)
+            total   = len(df)
+            auto_ok = len(df[df["decision"] == "APPROVE"])
+            flagged = len(df[df["requires_review"]])
+            blocked = len(df[df["decision"] == "BLOCK"])
+            avg_lat = sum(latencies) / len(latencies) if latencies else 0
+            st.session_state["sim_results"] = {
+                "df":        df,
+                "latencies": latencies,
+                "total":     total,
+                "auto_ok":   auto_ok,
+                "flagged":   flagged,
+                "blocked":   blocked,
+                "avg_lat":   avg_lat,
+                "total_ms":  sum(latencies),
+            }
+            get_pending.clear()
+            get_predictions.clear()
+            st.rerun()
 
-# Render simulation results
-if "sim_results" in st.session_state:
-    r = st.session_state["sim_results"]
-    df = r["df"]
+    # Render simulation results
+    if "sim_results" in st.session_state:
+        r = st.session_state["sim_results"]
+        df = r["df"]
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Transactions scored", r["total"])
-    m2.metric("Auto-approved",       r["auto_ok"])
-    m3.metric("Sent to review",      r["flagged"])
-    m4.metric("Auto-blocked",        r["blocked"])
-    m5.metric("Avg latency",         f"{r['avg_lat']:.0f} ms")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Transactions scored", r["total"])
+        m2.metric("Auto-approved",       r["auto_ok"])
+        m3.metric("Sent to review",      r["flagged"])
+        m4.metric("Auto-blocked",        r["blocked"])
+        m5.metric("Avg latency",         f"{r['avg_lat']:.0f} ms")
 
-    st.markdown("#### Auto-approved")
-    auto_df = df[df["decision"] == "APPROVE"][["merchant", "amount", "risk_band", "probability"]].copy()
-    auto_df["amount"]      = auto_df["amount"].map(lambda x: f"${x:,.2f}")
-    auto_df["probability"] = auto_df["probability"].map(lambda x: f"{x*100:.1f}%")
-    auto_df.columns        = ["Merchant", "Amount", "Risk band", "Fraud prob."]
-    if auto_df.empty:
-        st.info("No auto-approved transactions.")
-    else:
-        st.dataframe(auto_df, width='stretch', hide_index=True)
+        auto_df = df[df["decision"] == "APPROVE"][["merchant", "amount", "risk_band", "probability"]].copy()
+        auto_df["amount"]      = auto_df["amount"].map(lambda x: f"${x:,.2f}")
+        auto_df["probability"] = auto_df["probability"].map(lambda x: f"{x*100:.1f}%")
+        auto_df.columns        = ["Merchant", "Amount", "Risk band", "Fraud prob."]
+        if auto_df.empty:
+            st.info("No auto-approved transactions.")
+        else:
+            st.dataframe(auto_df, width='stretch', hide_index=True)
 
-    st.markdown("#### Flagged / blocked")
-    flag_df = df[df["requires_review"] | (df["decision"] == "BLOCK")][
-        ["merchant", "amount", "decision", "risk_band", "probability"]
-    ].copy()
-    flag_df["amount"]      = flag_df["amount"].map(lambda x: f"${x:,.2f}")
-    flag_df["probability"] = flag_df["probability"].map(lambda x: f"{x*100:.1f}%")
-    flag_df.columns        = ["Merchant", "Amount", "Decision", "Risk band", "Fraud prob."]
-    if flag_df.empty:
-        st.info("No flagged or blocked transactions.")
-    else:
-        st.dataframe(flag_df, width='stretch', hide_index=True)
+        flag_df = df[df["requires_review"] | (df["decision"] == "BLOCK")][
+            ["merchant", "amount", "decision", "risk_band", "probability"]
+        ].copy()
+        flag_df["amount"]      = flag_df["amount"].map(lambda x: f"${x:,.2f}")
+        flag_df["probability"] = flag_df["probability"].map(lambda x: f"{x*100:.1f}%")
+        flag_df.columns        = ["Merchant", "Amount", "Decision", "Risk band", "Fraud prob."]
+        if flag_df.empty:
+            st.info("No flagged or blocked transactions.")
+        else:
+            st.dataframe(flag_df, width='stretch', hide_index=True)
 
-    st.caption(f"Completed in {r['total_ms']:.0f} ms total.")
-
-st.divider()
+        st.caption(f"Completed in {r['total_ms']:.0f} ms total.")
 
 # --- Data (cached) ---
 
@@ -304,6 +367,39 @@ if pending is None:
 
 if all_predictions is None:
     all_predictions = []
+
+# --- Persistent KPI bar ---
+
+pending_count = len(pending) if isinstance(pending, list) else 0
+total_txns = total_preds
+fraud_volume = 0
+fraud_count = 0
+if all_predictions and len(all_predictions) > 0:
+    flagged_or_blocked = [p for p in all_predictions if p.get("requires_review") or p.get("decision") == "BLOCK"]
+    fraud_volume = sum(p.get("amt", 0) for p in flagged_or_blocked)
+    fraud_count = len(flagged_or_blocked)
+
+avg_latency = 0
+sim_lat = st.session_state.get("sim_results", {}).get("latencies")
+if sim_lat:
+    avg_latency = sum(sim_lat) / len(sim_lat)
+
+kpi_cols = st.columns(4)
+kpi_cols[0].metric("Transactions", f"{total_txns:,}" if total_txns else "—", help="Total predictions scored")
+kpi_cols[1].metric("Fraud Volume", f"${fraud_volume:,.0f}" if fraud_volume else "—", delta=f"{fraud_count} flagged" if fraud_count else None, delta_color="inverse", help="Total $ amounts flagged or blocked")
+kpi_cols[2].metric("Pending Review", f"{pending_count}", delta_color="inverse" if pending_count > 0 else "normal", help="Cases awaiting human decision")
+kpi_cols[3].metric("Avg Latency", f"{avg_latency:.0f} ms" if avg_latency else "—", help="API response time")
+
+# --- Pending banner ---
+
+if pending_count > 0:
+    st.markdown(
+        f'<div class="pending-banner">'
+        f'<span style="font-size:1.1rem;">&#9888;</span>'
+        f'<span><strong>{pending_count}</strong> case(s) pending review</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # --- Live Feed (SSE-powered, always visible when active) ---
 
@@ -406,7 +502,6 @@ view_mode = st.radio(
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 if view_mode == "Analytics":
-    st.title("ANALYTICS")
 
     sim_df = st.session_state.get("sim_results", {}).get("df")
     sim_latencies = st.session_state.get("sim_results", {}).get("latencies")
@@ -646,7 +741,6 @@ if view_mode == "Analytics":
 # ── Review Queue ──────────────────────────────────────────────────────────────
 
 elif view_mode == "Review Queue":
-    st.title("REVIEW QUEUE")
 
     if len(pending) == 0:
         st.success("All clear — no cases require manual review.")
@@ -743,7 +837,6 @@ elif view_mode == "Review Queue":
 # ── Activity History ──────────────────────────────────────────────────────────
 
 elif view_mode == "Activity History":
-    st.title("ACTIVITY HISTORY")
 
     all_items = st.session_state.get("prediction_items", all_predictions)
 
