@@ -4,7 +4,6 @@ from collections.abc import Generator
 from dotenv import load_dotenv
 from redis import asyncio as redis_asyncio
 from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 # a session is the main way to interact with the database. It manages connections and transactions.
 
@@ -24,12 +23,6 @@ def _build_connect_args(database_url: str) -> dict:
 
     connect_args: dict[str, object] = {}
 
-    # Supabase pooler hosts use PgBouncer-style transaction pooling, so we
-    # disable psycopg's automatic prepared statements unless the user
-    # explicitly overrides the behavior.
-    url = make_url(database_url)
-    is_supabase_pooler = bool(url.host and url.host.endswith(".pooler.supabase.com"))
-
     sslmode = os.getenv("DATABASE_SSLMODE")
     if sslmode:
         connect_args["sslmode"] = sslmode
@@ -37,12 +30,6 @@ def _build_connect_args(database_url: str) -> dict:
     connect_timeout = os.getenv("DATABASE_CONNECT_TIMEOUT")
     if connect_timeout:
         connect_args["connect_timeout"] = int(connect_timeout)
-
-    prepare_threshold = os.getenv("DATABASE_PREPARE_THRESHOLD")
-    if prepare_threshold is not None:
-        connect_args["prepare_threshold"] = int(prepare_threshold)
-    elif is_supabase_pooler:
-        connect_args["prepare_threshold"] = 0
 
     return connect_args
 
