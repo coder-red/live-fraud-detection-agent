@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from redis import asyncio as redis_asyncio
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +20,9 @@ sys.path.insert(0, str(project_root))
 
 from app.db.connections import get_db, get_redis
 from app.db.models import FraudCase, FraudPrediction
+from app.events import events
 from src.agent_review import generate_agent_review
+from src.output_guard import guard_agent_output
 from src.policy import classify_risk
 from langsmith import traceable
 
@@ -161,6 +165,13 @@ class HumanDecisionRequest(BaseModel):
     """What we expect when a human clicks 'Approve' or 'Block' in the dashboard."""
     decision: Literal["APPROVE", "BLOCK"]
     note: str | None = None # Optional field for the human reviewer to add notes about their decision.
+
+
+class PredictionPage(BaseModel):
+    items: list[PredictionRecord]
+    total: int
+    offset: int
+    limit: int
     
 # --- GLOBAL STATE ---
 # We store the ML model engine here so we don't have to reload it from disk every time someone hits the API.
@@ -265,6 +276,10 @@ def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudC
     entry in the FraudCase table for human review.
     """
     review = generate_agent_review(_record_to_dict(record), record.probability, policy, db=db)
+    summary, questions, pii_findings = guard_agent_output(review.summary, review.reviewer_questions)
+    if pii_findings:
+        import logging
+        logging.getLogger("uvicorn").warning("PII redacted from agent output: %s", pii_findings)
     case = FraudCase(
         case_id=str(uuid.uuid4()),
         prediction_id=record.id,
@@ -273,8 +288,8 @@ def _open_new_case(db: Session, record: FraudPrediction, policy: dict) -> FraudC
         agent_recommendation=review.recommendation,
         agent_confidence=review.confidence,
         reason_codes=review.reason_codes,
-        reviewer_questions=review.reviewer_questions,
-        reasoning=review.summary,
+        reviewer_questions=questions,
+        reasoning=summary,
         status="PENDING_REVIEW",
     )
     db.add(case)
@@ -427,7 +442,9 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
                         "requires_review": True,
                     }
                     case = _open_new_case(db, winner, policy)
-            return _prediction_payload(winner, case)
+            payload = _prediction_payload(winner, case)
+            await events.broadcast("new_prediction", payload)
+            return payload
 
         case = None
         if policy["requires_review"]:
@@ -437,7 +454,9 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
             db.commit()
             db.refresh(record)
 
-        return _prediction_payload(record, case)
+        payload = _prediction_payload(record, case)
+        await events.broadcast("new_prediction", payload)
+        return payload
 
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -445,21 +464,48 @@ it runs the ML model to get a prediction. It also handles the logic for opening 
         raise HTTPException(status_code=500, detail="Prediction failed") from exc
 
 
-@router.get("/predictions", response_model=list[PredictionRecord])
+@router.get("/stream")
+async def stream_events(request: Request):
+    async def event_stream():
+        queue = events.subscribe()
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"data: {json.dumps({'event': 'ping'})}\n\n"
+        finally:
+            events.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/predictions", response_model=PredictionPage)
 async def list_predictions(
-    limit: int = Query(default=20, ge=1, le=100), # ge is greater than or equal to, le is less than or equal to
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    """
-    Returns a list of the most recent fraud predictions.
-    Add the 'limit' parameter to say how many predictions to return (e.g.,limit=10).
-    """
-    return (
+    total = db.query(FraudPrediction).count()
+    items = (
         db.query(FraudPrediction)
         .order_by(FraudPrediction.created_at.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
+    return PredictionPage(items=items, total=total, offset=offset, limit=limit)
 
 
 @router.get("/predictions/{prediction_id}", response_model=PredictionRecord)

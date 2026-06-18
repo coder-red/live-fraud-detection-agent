@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 load_dotenv() # Load env vars early for tracing and config
 
@@ -9,6 +10,14 @@ app = FastAPI(
     title="Live Fraud Detection API",
     description="Real-time XGBoost inference for transaction fraud detection",
     version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8501", "null"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include the routes we defined

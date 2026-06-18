@@ -1,33 +1,26 @@
 import streamlit as st
 import requests
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import time
 import os
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
-API_ROOT_URL = API_BASE_URL.split("/api")[0]
+API_BASE_URL = os.getenv("API_BASE_URL")
+if not API_BASE_URL:
+    try:
+        r = requests.get("http://localhost:8000/", timeout=3)
+        API_BASE_URL = "http://localhost:8000/api/v1" if r.ok else "https://live-fraud-detection-agent.onrender.com/api/v1"
+    except requests.RequestException:
+        API_BASE_URL = "https://live-fraud-detection-agent.onrender.com/api/v1"
 
 st.set_page_config(page_title="Fraud Console", layout="wide")
 
-st.markdown("""
-    <style>
-    @import url('https://rsms.me/inter/inter.css');
-    .stApp { background-color: #0e1117; color: #fafafa; font-family: 'Inter', sans-serif; }
-    div[data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        padding: 15px;
-    }
-    .stTextArea textarea {
-        background-color: #0d1117 !important;
-        border: 1px solid #30363d !important;
-        color: #fafafa !important;
-    }
-    .stButton > button { border-radius: 6px; font-weight: 500; }
-    .arch-note { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
-    </style>
-""", unsafe_allow_html=True)
+_custom = st.session_state.get("_custom_api_url")
+if _custom:
+    API_BASE_URL = _custom
+
+API_ROOT_URL = API_BASE_URL.split("/api")[0]
 
 # --- Helpers ---
 
@@ -77,8 +70,11 @@ def get_pending():
     return get_data("cases/pending")
 
 @st.cache_data(ttl=15)
-def get_predictions():
-    return get_data("predictions?limit=100")
+def get_predictions(limit: int = 100, offset: int = 0):
+    data = get_data(f"predictions?limit={limit}&offset={offset}")
+    if isinstance(data, dict) and "items" in data:
+        return data
+    return {"items": data if isinstance(data, list) else [], "total": 0, "offset": offset, "limit": limit}
 
 @st.cache_data(ttl=60)
 def get_health():
@@ -98,8 +94,64 @@ if not health:
             health = get_health()
             if health:
                 st.rerun()
-    st.error(f"Connection Error: Could not reach API at {API_BASE_URL}")
+    st.error(
+        f"Could not reach API at {API_BASE_URL}\n\n"
+        "Start the API locally:\n"
+        "```\nuvicorn app.main:app --host 0.0.0.0 --port 8000\n```\n\n"
+        "Or enter a custom URL in the sidebar."
+    )
     st.stop()
+
+# --- Sidebar ---
+
+with st.sidebar:
+    st.markdown("### Live Feed")
+    st.checkbox(
+        "🔴 Live auto-refresh",
+        value=st.session_state.get("live_mode", False),
+        key="live_mode",
+        help="Polls /api/v1/stream every 5 seconds for new predictions.",
+    )
+    st.caption("Refreshes the dashboard automatically when new predictions arrive.")
+    st.divider()
+    st.markdown("### Connection")
+    api_status = "🟢 Connected" if health else "🔴 Disconnected"
+    st.markdown(f"**API:** {api_status}")
+    custom_url = st.text_input(
+        "API URL",
+        value=st.session_state.get("_custom_api_url", ""),
+        placeholder="http://localhost:8000/api/v1",
+        label_visibility="collapsed",
+    )
+    if custom_url and custom_url != st.session_state.get("_custom_api_url"):
+        st.session_state["_custom_api_url"] = custom_url
+        st.rerun()
+    st.divider()
+    if st.button("🗑 Clear Cache", use_container_width=True):
+        st.session_state.pop("sim_results", None)
+        get_pending.clear()
+        get_predictions.clear()
+        st.rerun()
+
+st.markdown("""
+    <style>
+    @import url('https://rsms.me/inter/inter.css');
+    .stApp { background-color: #0e1117; color: #fafafa; font-family: 'Inter', sans-serif; }
+    div[data-testid="stMetric"] {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    .stTextArea textarea {
+        background-color: #0d1117 !important;
+        border: 1px solid #30363d !important;
+        color: #fafafa !important;
+    }
+    .stButton > button { border-radius: 6px; font-weight: 500; }
+    .arch-note { font-size: 0.75rem; color: #8b949e; margin-top: 4px; }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- Header ---
 
@@ -109,7 +161,7 @@ with col_title:
     st.caption("XGBoost · LangGraph HITL · FastAPI  —  real-time transaction scoring + human review queue")
 with col_refresh:
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("↺ Refresh", use_container_width=True):
+    if st.button("↺ Refresh", width='stretch'):
         st.session_state.pop("sim_results", None)
         get_pending.clear()
         get_predictions.clear()
@@ -168,13 +220,14 @@ if st.button("▶  Score all transactions", key="run_simulation"):
         blocked = len(df[df["decision"] == "BLOCK"])
         avg_lat = sum(latencies) / len(latencies) if latencies else 0
         st.session_state["sim_results"] = {
-            "df":       df,
-            "total":    total,
-            "auto_ok":  auto_ok,
-            "flagged":  flagged,
-            "blocked":  blocked,
-            "avg_lat":  avg_lat,
-            "total_ms": sum(latencies),
+            "df":        df,
+            "latencies": latencies,
+            "total":     total,
+            "auto_ok":   auto_ok,
+            "flagged":   flagged,
+            "blocked":   blocked,
+            "avg_lat":   avg_lat,
+            "total_ms":  sum(latencies),
         }
         get_pending.clear()
         get_predictions.clear()
@@ -200,7 +253,7 @@ if "sim_results" in st.session_state:
     if auto_df.empty:
         st.info("No auto-approved transactions.")
     else:
-        st.dataframe(auto_df, use_container_width=True, hide_index=True)
+        st.dataframe(auto_df, width='stretch', hide_index=True)
 
     st.markdown("#### Flagged / blocked")
     flag_df = df[df["requires_review"] | (df["decision"] == "BLOCK")][
@@ -212,7 +265,7 @@ if "sim_results" in st.session_state:
     if flag_df.empty:
         st.info("No flagged or blocked transactions.")
     else:
-        st.dataframe(flag_df, use_container_width=True, hide_index=True)
+        st.dataframe(flag_df, width='stretch', hide_index=True)
 
     st.caption(f"Completed in {r['total_ms']:.0f} ms total.")
 
@@ -220,10 +273,27 @@ st.divider()
 
 # --- Data (cached) ---
 
-pending         = get_pending()
-all_predictions = get_predictions()
+pending          = get_pending()
+predictions_page = get_predictions()
+all_predictions  = predictions_page.get("items", []) if isinstance(predictions_page, dict) else (predictions_page or [])
+total_preds      = predictions_page.get("total", len(all_predictions)) if isinstance(predictions_page, dict) else len(all_predictions)
 
-if pending == "NOT_FOUND" or all_predictions == "NOT_FOUND":
+# Pagination: version counter resets accumulated items on cache refresh
+if "prediction_version" not in st.session_state:
+    st.session_state["prediction_version"] = 0
+    st.session_state["prediction_items"] = list(all_predictions)
+    st.session_state["prediction_offset"] = 100
+else:
+    prev_items = st.session_state["prediction_items"]
+    stale = len(prev_items) > len(all_predictions) or (
+        len(prev_items) > 0 and len(all_predictions) > 0 and prev_items[0].get("id") != all_predictions[0].get("id")
+    )
+    if stale:
+        st.session_state["prediction_version"] += 1
+        st.session_state["prediction_items"] = list(all_predictions)
+        st.session_state["prediction_offset"] = 100
+
+if pending == "NOT_FOUND" or predictions_page == "NOT_FOUND":
     st.error("Endpoint Error: Required API routes not found.")
     st.warning("Your Docker image is outdated. Run: docker compose up --build")
     st.stop()
@@ -235,18 +305,347 @@ if pending is None:
 if all_predictions is None:
     all_predictions = []
 
+# --- Live Feed (SSE-powered, always visible when active) ---
+
+if st.session_state.get("live_mode"):
+    from streamlit.components.v1 import html as st_html
+    sse_url = f"{API_BASE_URL}/stream"
+    st_html(
+        f"""
+        <div id="sse-feed" style="font-family: 'Inter', -apple-system, sans-serif; background:#0e1117; color:#fafafa; border-radius:8px; padding:4px 0;">
+            <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #30363d; margin-bottom:4px;">
+                <span style="display:inline-block; width:8px; height:8px; background:#22c55e; border-radius:50%; animation:pulse 2s infinite;"></span>
+                <span style="font-size:13px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;">Live Feed</span>
+                <span id="sse-status" style="font-size:11px; color:#8b949e; margin-left:auto;">connecting…</span>
+            </div>
+            <div id="sse-items" style="max-height:360px; overflow-y:auto; padding:4px 0;"></div>
+        </div>
+        <style>
+            @keyframes pulse {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.3; }} }}
+            @keyframes slideIn {{ from {{ opacity:0; transform:translateY(-12px); }} to {{ opacity:1; transform:translateY(0); }} }}
+            .sse-card {{ display:flex; align-items:center; gap:12px; padding:8px 12px; margin:2px 4px; background:#161b22; border:1px solid #21262d; border-radius:6px; animation:slideIn 0.3s ease-out; font-size:13px; }}
+            .sse-card:hover {{ border-color:#30363d; }}
+            .sse-card .merchant {{ flex:2; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+            .sse-card .amount {{ flex:1; text-align:right; font-variant-numeric:tabular-nums; }}
+            .sse-card .band {{ flex:1; text-align:center; }}
+            .sse-card .prob {{ flex:1; text-align:center; font-variant-numeric:tabular-nums; }}
+            .sse-card .decision {{ flex:1; text-align:center; }}
+            .badge {{ display:inline-block; padding:1px 8px; border-radius:4px; font-size:11px; font-weight:600; text-transform:uppercase; }}
+            .badge-LOW {{ background:#052e16; color:#22c55e; }}
+            .badge-MEDIUM {{ background:#422006; color:#eab308; }}
+            .badge-HIGH {{ background:#431407; color:#f97316; }}
+            .badge-CRITICAL {{ background:#450a0a; color:#ef4444; }}
+        </style>
+        <script>
+        (function(){{
+            var es = new EventSource("{sse_url}");
+            var items = document.getElementById("sse-items");
+            var status = document.getElementById("sse-status");
+            var count = 0;
+
+            es.onopen = function() {{
+                status.textContent = "connected";
+                status.style.color = "#22c55e";
+            }};
+
+            es.onmessage = function(e) {{
+                try {{
+                    var msg = JSON.parse(e.data);
+                    if (msg.event === "ping") return;
+                    var d = msg.data;
+                    count++;
+                    status.textContent = count + " new";
+
+                    var band = (d.risk_band || "LOW").toUpperCase();
+                    var prob = ((d.probability || 0) * 100).toFixed(0) + "%";
+                    var amt = "$" + (d.amt || 0).toLocaleString(undefined, {{minimumFractionDigits:2, maximumFractionDigits:2}});
+                    var dec = d.decision || "—";
+                    var emoji = {{"APPROVE":"\u2705","REVIEW":"\uD83D\uDD36","BLOCK":"\u274C"}}[dec] || "\u2795";
+                    var merchant = d.merchant || "—";
+
+                    var card = document.createElement("div");
+                    card.className = "sse-card";
+                    card.innerHTML =
+                        '<span class="merchant">' + merchant + '</span>' +
+                        '<span class="amount">' + amt + '</span>' +
+                        '<span class="band"><span class="badge badge-' + band + '">' + band + '</span></span>' +
+                        '<span class="prob">' + prob + '</span>' +
+                        '<span class="decision">' + emoji + ' ' + dec + '</span>';
+                    items.insertBefore(card, items.firstChild);
+
+                    // Keep at most 50 items
+                    while (items.children.length > 50) {{
+                        items.removeChild(items.lastChild);
+                    }}
+                }} catch(err) {{
+                    console.warn("SSE parse error", err);
+                }}
+            }};
+
+            es.onerror = function() {{
+                status.textContent = "reconnecting…";
+                status.style.color = "#f97316";
+            }};
+        }})();
+        </script>
+        """,
+        height=420,
+        scrolling=False,
+    )
+    st.caption("New predictions appear instantly via SSE. Charts refresh every 10s.")
+
 # --- Navigation ---
 
 view_mode = st.radio(
     "View",
-    ["Review Queue", "Activity History"],
+    ["Analytics", "Review Queue", "Activity History"],
     horizontal=True,
     label_visibility="collapsed",
 )
 
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+if view_mode == "Analytics":
+    st.title("ANALYTICS")
+
+    sim_df = st.session_state.get("sim_results", {}).get("df")
+    sim_latencies = st.session_state.get("sim_results", {}).get("latencies")
+    has_sim = sim_df is not None and len(sim_df) > 0
+
+    if not all_predictions and not has_sim:
+        st.info("No data yet. Run a simulation above to generate charts.")
+        st.stop()
+
+    chart_data = pd.DataFrame(all_predictions) if all_predictions else pd.DataFrame()
+
+    if not chart_data.empty:
+        chart_data["trans_date_trans_time"] = pd.to_datetime(chart_data["trans_date_trans_time"], errors="coerce")
+
+    tabs = st.tabs(["Risk Distribution", "Decisions", "Categories", "Amounts", "Latency"])
+
+    # ── Tab 1: Probability Distribution ──
+    with tabs[0]:
+        col1, col2 = st.columns(2)
+        with col1:
+            if not chart_data.empty and "probability" in chart_data.columns:
+                fig = px.histogram(
+                    chart_data,
+                    x="probability",
+                    color="risk_band",
+                    nbins=40,
+                    title="Fraud Probability Distribution",
+                    labels={"probability": "Fraud Probability", "count": "Transactions", "risk_band": "Risk Band"},
+                    color_discrete_map={
+                        "LOW": "#22c55e", "MEDIUM": "#eab308",
+                        "HIGH": "#f97316", "CRITICAL": "#ef4444",
+                    },
+                    template="plotly_dark",
+                )
+                fig.update_layout(
+                    bargap=0.05,
+                    xaxis=dict(tickformat=".0%"),
+                    legend=dict(orientation="h", y=1.12),
+                    height=350,
+                )
+                st.plotly_chart(fig, width='stretch')
+
+        with col2:
+            if not chart_data.empty and "probability" in chart_data.columns:
+                fig = px.box(
+                    chart_data,
+                    x="risk_band",
+                    y="probability",
+                    color="risk_band",
+                    title="Probability by Risk Band",
+                    labels={"probability": "Fraud Probability", "risk_band": "Risk Band"},
+                    color_discrete_map={
+                        "LOW": "#22c55e", "MEDIUM": "#eab308",
+                        "HIGH": "#f97316", "CRITICAL": "#ef4444",
+                    },
+                    template="plotly_dark",
+                    category_orders={"risk_band": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+                )
+                fig.update_layout(
+                    showlegend=False,
+                    yaxis=dict(tickformat=".0%"),
+                    height=350,
+                )
+                st.plotly_chart(fig, width='stretch')
+
+    # ── Tab 2: Decision Breakdown ──
+    with tabs[1]:
+        col1, col2 = st.columns(2)
+        with col1:
+            if not chart_data.empty and "decision" in chart_data.columns:
+                decision_counts = chart_data["decision"].value_counts().reset_index()
+                decision_counts.columns = ["decision", "count"]
+                fig = go.Figure(
+                    go.Pie(
+                        labels=decision_counts["decision"],
+                        values=decision_counts["count"],
+                        hole=0.5,
+                        marker=dict(colors=["#22c55e", "#eab308", "#ef4444"]),
+                    )
+                )
+                fig.update_layout(
+                    title="Decision Breakdown",
+                    template="plotly_dark",
+                    height=350,
+                    annotations=[dict(text=f"{len(chart_data)}", x=0.5, y=0.5, font_size=24, showarrow=False)],
+                )
+                st.plotly_chart(fig, width='stretch')
+
+        with col2:
+            if not chart_data.empty and "risk_band" in chart_data.columns:
+                risk_counts = chart_data["risk_band"].value_counts().reset_index()
+                risk_counts.columns = ["risk_band", "count"]
+                risk_order = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+                risk_counts["risk_band"] = pd.Categorical(risk_counts["risk_band"], categories=risk_order, ordered=True)
+                risk_counts = risk_counts.sort_values("risk_band")
+                fig = px.bar(
+                    risk_counts,
+                    x="risk_band",
+                    y="count",
+                    color="risk_band",
+                    title="Risk Band Distribution",
+                    labels={"risk_band": "Risk Band", "count": "Transactions"},
+                    color_discrete_map={
+                        "LOW": "#22c55e", "MEDIUM": "#eab308",
+                        "HIGH": "#f97316", "CRITICAL": "#ef4444",
+                    },
+                    template="plotly_dark",
+                    category_orders={"risk_band": risk_order},
+                )
+                fig.update_layout(showlegend=False, height=350)
+                st.plotly_chart(fig, width='stretch')
+
+    # ── Tab 3: Categories ──
+    with tabs[2]:
+        if not chart_data.empty and "category" in chart_data.columns:
+            cat_counts = chart_data.groupby(["category", "risk_band"]).size().reset_index(name="count")
+            fig = px.bar(
+                cat_counts,
+                x="category",
+                y="count",
+                color="risk_band",
+                title="Transactions by Category and Risk Band",
+                labels={"category": "Category", "count": "Transactions", "risk_band": "Risk Band"},
+                color_discrete_map={
+                    "LOW": "#22c55e", "MEDIUM": "#eab308",
+                    "HIGH": "#f97316", "CRITICAL": "#ef4444",
+                },
+                template="plotly_dark",
+                barmode="stack",
+            )
+            fig.update_layout(
+                xaxis=dict(tickangle=-45),
+                height=400,
+                legend=dict(orientation="h", y=1.12),
+            )
+            st.plotly_chart(fig, width='stretch')
+
+            flagged = chart_data[chart_data["decision"] == "BLOCK"].groupby("category").size().reset_index(name="count")
+            flagged = flagged.sort_values("count", ascending=True)
+            if not flagged.empty:
+                fig = px.bar(
+                    flagged.tail(10),
+                    x="count",
+                    y="category",
+                    orientation="h",
+                    title="Top Categories Blocked",
+                    labels={"category": "", "count": "Blocked"},
+                    color="count",
+                    color_continuous_scale="Reds",
+                    template="plotly_dark",
+                )
+                fig.update_layout(height=350, showlegend=False, yaxis=dict(autorange="reversed"))
+                st.plotly_chart(fig, width='stretch')
+
+    # ── Tab 4: Amount Analysis ──
+    with tabs[3]:
+        col1, col2 = st.columns(2)
+        with col1:
+            if not chart_data.empty and "amt" in chart_data.columns:
+                fig = px.scatter(
+                    chart_data,
+                    x="amt",
+                    y="probability",
+                    color="decision",
+                    title="Amount vs Fraud Probability",
+                    labels={"amt": "Transaction Amount ($)", "probability": "Fraud Probability", "decision": "Decision"},
+                    color_discrete_map={
+                        "APPROVE": "#22c55e", "REVIEW": "#eab308",
+                        "BLOCK": "#ef4444", "ERROR": "#6b7280",
+                    },
+                    template="plotly_dark",
+                    opacity=0.6,
+                )
+                fig.update_layout(
+                    height=400,
+                    yaxis=dict(tickformat=".0%"),
+                    xaxis=dict(tickprefix="$"),
+                )
+                st.plotly_chart(fig, width='stretch')
+
+        with col2:
+            if not chart_data.empty and "amt" in chart_data.columns:
+                fig = px.box(
+                    chart_data,
+                    x="decision",
+                    y="amt",
+                    color="decision",
+                    title="Amount Distribution by Decision",
+                    labels={"amt": "Amount ($)", "decision": "Decision"},
+                    color_discrete_map={
+                        "APPROVE": "#22c55e", "REVIEW": "#eab308",
+                        "BLOCK": "#ef4444", "ERROR": "#6b7280",
+                    },
+                    template="plotly_dark",
+                )
+                fig.update_layout(showlegend=False, height=400, yaxis=dict(tickprefix="$"))
+                st.plotly_chart(fig, width='stretch')
+
+    # ── Tab 5: Latency ──
+    with tabs[4]:
+        if has_sim and sim_latencies:
+            lat_df = pd.DataFrame({"latency_ms": sim_latencies})
+            col1, col2 = st.columns(2)
+            with col1:
+                fig = px.histogram(
+                    lat_df,
+                    x="latency_ms",
+                    nbins=30,
+                    title="Prediction Latency Distribution",
+                    labels={"latency_ms": "Latency (ms)", "count": "Requests"},
+                    template="plotly_dark",
+                )
+                fig.update_layout(bargap=0.05, height=350)
+                st.plotly_chart(fig, width='stretch')
+
+            with col2:
+                fig = px.box(
+                    lat_df,
+                    y="latency_ms",
+                    title="Latency Summary",
+                    labels={"latency_ms": "Latency (ms)"},
+                    template="plotly_dark",
+                )
+                fig.update_layout(showlegend=False, height=350)
+                st.plotly_chart(fig, width='stretch')
+
+            avg_lat = pd.Series(sim_latencies).mean()
+            max_lat = pd.Series(sim_latencies).max()
+            p99_lat = pd.Series(sim_latencies).quantile(0.99)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Avg latency", f"{avg_lat:.0f} ms")
+            m2.metric("P99 latency", f"{p99_lat:.0f} ms")
+            m3.metric("Max latency", f"{max_lat:.0f} ms")
+        else:
+            st.info("Run a simulation above to see latency metrics.")
+
 # ── Review Queue ──────────────────────────────────────────────────────────────
 
-if view_mode == "Review Queue":
+elif view_mode == "Review Queue":
     st.title("REVIEW QUEUE")
 
     if len(pending) == 0:
@@ -321,7 +720,7 @@ if view_mode == "Review Queue":
                 note = st.text_area("NOTES", placeholder="Decision rationale…", label_visibility="collapsed")
 
                 b1, b2 = st.columns(2)
-                if b1.button("APPROVE", type="primary", use_container_width=True):
+                if b1.button("APPROVE", type="primary", width='stretch'):
                     if post_data(f"cases/{selected_id}/decision", {"decision": "APPROVE", "note": note}):
                         get_pending.clear()
                         get_predictions.clear()
@@ -331,7 +730,7 @@ if view_mode == "Review Queue":
                     else:
                         st.error("Failed. Please retry.")
 
-                if b2.button("BLOCK", use_container_width=True):
+                if b2.button("BLOCK", width='stretch'):
                     if post_data(f"cases/{selected_id}/decision", {"decision": "BLOCK", "note": note}):
                         get_pending.clear()
                         get_predictions.clear()
@@ -346,30 +745,101 @@ if view_mode == "Review Queue":
 elif view_mode == "Activity History":
     st.title("ACTIVITY HISTORY")
 
-    if all_predictions:
-        auto_approved = [p for p in all_predictions if not p.get("requires_review")]
+    all_items = st.session_state.get("prediction_items", all_predictions)
 
-        st.markdown(f"#### Auto-approved ({len(auto_approved)})")
-        if auto_approved:
-            df = pd.DataFrame(auto_approved)
-            if "trans_date_trans_time" in df.columns:
-                df["trans_date_trans_time"] = pd.to_datetime(df["trans_date_trans_time"], errors="coerce")
-                df = df.sort_values("trans_date_trans_time", ascending=False)
-            display_df = df[["trans_date_trans_time", "amt", "category", "merchant", "risk_band", "decision"]].copy()
-            display_df.columns = ["Time", "Amount", "Category", "Merchant", "Risk", "Outcome"]
-            display_df["Amount"] = display_df["Amount"].map(lambda x: f"${x:,.2f}")
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No automatic approvals yet.")
-
-        st.markdown("#### Full audit log")
-        df_full = pd.DataFrame(all_predictions)
+    if not all_items:
+        st.info("No transaction history yet. Run the simulation above.")
+    else:
+        df_full = pd.DataFrame(all_items)
         if "trans_date_trans_time" in df_full.columns:
             df_full["trans_date_trans_time"] = pd.to_datetime(df_full["trans_date_trans_time"], errors="coerce")
             df_full = df_full.sort_values("trans_date_trans_time", ascending=False)
-        log_df = df_full[["trans_date_trans_time", "amt", "merchant", "risk_band", "decision", "requires_review"]].copy()
+
+        with st.expander("Filters", expanded=False):
+            f1, f2, f3, f4, f5 = st.columns(5)
+
+            with f1:
+                if "trans_date_trans_time" in df_full.columns and not df_full["trans_date_trans_time"].isna().all():
+                    min_date = df_full["trans_date_trans_time"].min().date()
+                    max_date = df_full["trans_date_trans_time"].max().date()
+                    date_start = st.date_input("From", min_date, min_value=min_date, max_value=max_date, key="f_date_start")
+                    date_end = st.date_input("To", max_date, min_value=min_date, max_value=max_date, key="f_date_end")
+                else:
+                    date_start = date_end = None
+                    st.write("No date data")
+
+            with f2:
+                categories = sorted(df_full["category"].dropna().unique()) if "category" in df_full.columns else []
+                selected_cats = st.multiselect("Category", categories, default=[], key="f_cats")
+
+            with f3:
+                bands = [b for b in ["LOW", "MEDIUM", "HIGH", "CRITICAL"] if b in df_full["risk_band"].values]
+                selected_bands = st.multiselect("Risk Band", bands, default=[], key="f_bands")
+
+            with f4:
+                if "amt" in df_full.columns and not df_full["amt"].isna().all():
+                    min_amt = float(df_full["amt"].min())
+                    max_amt = float(df_full["amt"].max())
+                    amt_range = st.slider("Amount ($)", min_value=min_amt, max_value=max_amt, value=(min_amt, max_amt), key="f_amt")
+                else:
+                    amt_range = None
+
+            with f5:
+                search = st.text_input("Merchant", placeholder="Search…", key="f_merchant")
+
+        filtered = df_full.copy()
+        if date_start and date_end:
+            filtered = filtered[
+                (filtered["trans_date_trans_time"].dt.date >= date_start) &
+                (filtered["trans_date_trans_time"].dt.date <= date_end)
+            ]
+        if selected_cats:
+            filtered = filtered[filtered["category"].isin(selected_cats)]
+        if selected_bands:
+            filtered = filtered[filtered["risk_band"].isin(selected_bands)]
+        if amt_range:
+            filtered = filtered[(filtered["amt"] >= amt_range[0]) & (filtered["amt"] <= amt_range[1])]
+        if search:
+            filtered = filtered[filtered["merchant"].str.contains(search, case=False, na=False)]
+
+        total_count = len(filtered)
+        auto_approved_count = len(filtered[~filtered["requires_review"]])
+        flagged_count = len(filtered[filtered["requires_review"]])
+
+        st.markdown(f"#### Summary — {total_count} transactions ({auto_approved_count} auto-approved, {flagged_count} flagged)")
+
+        auto_df = filtered[~filtered["requires_review"]].copy()
+        if not auto_df.empty:
+            display = auto_df[["trans_date_trans_time", "amt", "category", "merchant", "risk_band", "decision"]].copy()
+            display.columns = ["Time", "Amount", "Category", "Merchant", "Risk", "Outcome"]
+            display["Amount"] = display["Amount"].map(lambda x: f"${x:,.2f}")
+            st.dataframe(display, width='stretch', hide_index=True)
+        else:
+            st.info("No matching auto-approved transactions.")
+
+        st.divider()
+        st.markdown(f"#### Full audit log ({total_count})")
+
+        log_df = filtered[["trans_date_trans_time", "amt", "merchant", "risk_band", "decision", "requires_review"]].copy()
         log_df.columns = ["Time", "Amount", "Merchant", "Risk", "Action", "Review Req."]
         log_df["Amount"] = log_df["Amount"].map(lambda x: f"${x:,.2f}")
-        st.dataframe(log_df.head(50), use_container_width=True, hide_index=True)
-    else:
-        st.info("No transaction history yet. Run the simulation above.")
+        st.dataframe(log_df.head(50), width='stretch', hide_index=True)
+
+        loaded = len(st.session_state["prediction_items"])
+        if loaded < total_preds:
+            if st.button(f"Load More ({loaded} / {total_preds})", use_container_width=True):
+                next_page = get_data(f"predictions?limit=100&offset={st.session_state['prediction_offset']}")
+                if isinstance(next_page, dict) and "items" in next_page:
+                    existing_ids = {p["id"] for p in st.session_state["prediction_items"]}
+                    new_items = [p for p in next_page["items"] if p["id"] not in existing_ids]
+                    st.session_state["prediction_items"].extend(new_items)
+                    st.session_state["prediction_offset"] += 100
+                st.rerun()
+
+# --- Auto-refresh loop ---
+
+if st.session_state.get("live_mode"):
+    get_pending.clear()
+    get_predictions.clear()
+    time.sleep(10)
+    st.rerun()

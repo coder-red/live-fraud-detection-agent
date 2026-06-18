@@ -171,8 +171,8 @@ async def test_predict_low_risk_persists_prediction_without_case(api_client):
     assert payload["case_id"] is None
 
     predictions = (await client.get("/api/v1/predictions")).json()
-    assert len(predictions) == 1
-    assert predictions[0]["id"] == payload["id"]
+    assert isinstance(predictions, dict) and predictions["total"] == 1
+    assert predictions["items"][0]["id"] == payload["id"]
 
 
 async def test_predict_same_payload_is_idempotent(api_client):
@@ -184,7 +184,7 @@ async def test_predict_same_payload_is_idempotent(api_client):
 
     assert first["id"] == second["id"]
     predictions = (await client.get("/api/v1/predictions")).json()
-    assert len(predictions) == 1
+    assert isinstance(predictions, dict) and predictions["total"] == 1
 
 
 async def test_get_prediction_returns_saved_prediction(api_client):
@@ -311,7 +311,8 @@ async def test_predictions_limit_accepts_upper_boundary(api_client):
     response = await client.get("/api/v1/predictions?limit=100")
 
     assert response.status_code == 200
-    assert response.json() == []
+    body = response.json()
+    assert isinstance(body, dict) and body["total"] == 0 and body["items"] == []
 
 
 @pytest.mark.parametrize("limit", [0, 101])
