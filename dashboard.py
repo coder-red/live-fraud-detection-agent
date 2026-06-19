@@ -456,7 +456,7 @@ if st.session_state.get("live_mode"):
                     var prob = ((d.probability || 0) * 100).toFixed(0) + "%";
                     var amt = "$" + (d.amt || 0).toLocaleString(undefined, {{minimumFractionDigits:2, maximumFractionDigits:2}});
                     var dec = d.decision || "—";
-                    var emoji = {{"APPROVE":"\u2705","REVIEW":"\uD83D\uDD36","BLOCK":"\u274C"}}[dec] || "\u2795";
+                    var emoji = {{"APPROVE":"✅","REVIEW":"🔶","BLOCK":"❌"}}[dec] || "➖";
                     var merchant = d.merchant || "—";
 
                     var card = document.createElement("div");
