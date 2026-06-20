@@ -16,19 +16,6 @@
 
 Transactions within high-risk categories such as online shopping and groceries, as well as those occurring during late-night hours (22:00-03:00) were significantly more likely to be fraudulent.
 
-## Completed So Far
-
-- Trained an XGBoost fraud classifier on 500k rows from the Kaggle fraud dataset.
-- Built reusable feature engineering for time, geography, and transaction behavior.
-- Shipped a FastAPI scoring API with deterministic policy-based decisions.
-- Added Redis-backed deduplication and sliding-window rate limiting.
-- Built an agentic review layer with CoVe evidence, LLM-as-a-judge evaluation, and prompt-injection detection.
-- Added PostgreSQL persistence for predictions and fraud review cases.
-- Built a Streamlit review console for pending cases and analyst decisions.
-- Added CI/CD with tests, linting, Docker validation, dependency scanning, and a LangSmith eval gate.
-- Hosted the app on Render.
-
-
 ## Author
 
 - [@coder-red](https://www.github.com/coder-red)
@@ -71,12 +58,6 @@ Risk operations teams and fintech institutions can use a system like this to aut
 - **Fast, Stateful Backend:** Used FastAPI to expose the scoring flow as a real API, added PostgreSQL persistence for predictions and fraud cases, and used Redis for request deduplication and sliding-window rate limiting so the system behaves more like a real production service.
 
 - **Reviewer Console:** Added a Streamlit dashboard to simulate a lightweight fraud-ops console where pending cases, transaction details, model outputs, and human decisions can all be viewed in one place.
-
-## Current State
-
-This is now a hosted hybrid AI fraud detection system with real-time scoring, deterministic policy enforcement, Redis-backed deduplication and rate limiting, PostgreSQL persistence, a human-in-the-loop review flow, LangSmith evals, CI/CD, and safety guardrails for the agent review path.
-
-The system is built to catch fraud broadly with ML, then escalate the suspicious edge cases to an agent and a human reviewer instead of pretending the model is always certain.
 
 
 ## Tech Stack
