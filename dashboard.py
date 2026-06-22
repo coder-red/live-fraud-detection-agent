@@ -6,13 +6,8 @@ import plotly.graph_objects as go
 import time
 import os
 
-API_BASE_URL = os.getenv("API_BASE_URL")
-if not API_BASE_URL:
-    try:
-        r = requests.get("http://localhost:8000/", timeout=3)
-        API_BASE_URL = "http://localhost:8000/api/v1" if r.ok else "https://live-fraud-detection-agent.onrender.com/api/v1"
-    except requests.RequestException:
-        API_BASE_URL = "https://live-fraud-detection-agent.onrender.com/api/v1"
+API_DEFAULT = "https://live-fraud-detection-agent.onrender.com/api/v1"
+API_BASE_URL = os.getenv("API_BASE_URL", API_DEFAULT)
 
 st.set_page_config(page_title="Fraud Console", layout="wide")
 
@@ -88,12 +83,18 @@ def get_health():
 
 health = get_health()
 if not health:
-    with st.spinner("Waking up the API (cold start)..."):
-        for _ in range(6):
-            time.sleep(5)
-            health = get_health()
-            if health:
-                st.rerun()
+    status_placeholder = st.empty()
+    status_placeholder.info("Waking up the API (cold start can take up to 2 min)...")
+    for attempt in range(12):
+        time.sleep(10)
+        health = get_health()
+        if health:
+            status_placeholder.success("API is online!")
+            st.rerun()
+        status_placeholder.info(
+            f"Waiting for API... attempt {attempt + 1}/12"
+        )
+    status_placeholder.empty()
     st.error(
         f"Could not reach API at {API_BASE_URL}\n\n"
         "Start the API locally:\n"
