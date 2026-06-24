@@ -4,12 +4,10 @@
 
 ![Python version](https://img.shields.io/badge/Python%20version-3.11%2B-lightgrey)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat&logo=scikitlearn&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=chainlink&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-000000?style=flat&logo=graph-dot-org&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-f55036?style=flat&logo=speedtest&logoColor=white)
 ![XGBoost](https://img.shields.io/badge/XGBoost-2ECC71?style=flat&logo=anaconda&logoColor=white)
-![NumPy](https://img.shields.io/badge/NumPy-013243?style=flat&logo=numpy&logoColor=white)
 
 
 # Key findings:
@@ -18,8 +16,8 @@ Transactions within high-risk categories such as online shopping and groceries, 
 
 ## Live Demo
 
-- API: https://live-fraud-detection-agent.onrender.com/
-- Dashboard: https://live-fraud-detection-agent-1.onrender.com/
+- API: https://live-fraud-detection-agent.onrender.com
+- Dashboard: https://mhmdxch-fraud-dashboard.hf.space
 
 ## Author
 

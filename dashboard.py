@@ -55,7 +55,7 @@ def generate_simulation_transactions(count: int = 50, fraud_ratio: float = 0.5) 
     Each call produces unique transactions, ensuring no duplicate fingerprints
     and always creating new predictions and review cases.
     """
-    from src.transaction_generator import generate_transactions
+    from transaction_generator import generate_transactions
     return generate_transactions(count=count, fraud_ratio=fraud_ratio)
 
 # --- Cached data fetchers ---
@@ -122,7 +122,7 @@ with st.sidebar:
     custom_url = st.text_input(
         "API URL",
         value=st.session_state.get("_custom_api_url", ""),
-        placeholder="http://localhost:8000/api/v1",
+        placeholder="https://live-fraud-detection-agent.onrender.com/api/v1",
         label_visibility="collapsed",
     )
     if custom_url and custom_url != st.session_state.get("_custom_api_url"):

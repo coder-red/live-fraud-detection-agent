@@ -45,6 +45,7 @@ build/
 Thumbs.db
 
 # Large local-only project assets not needed in the image
+data/
 notebooks/
 assets/
 coverage/
