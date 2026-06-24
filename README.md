@@ -9,11 +9,6 @@
 ![Groq](https://img.shields.io/badge/Groq-f55036?style=flat&logo=speedtest&logoColor=white)
 ![XGBoost](https://img.shields.io/badge/XGBoost-2ECC71?style=flat&logo=anaconda&logoColor=white)
 
-
-# Key findings:
-
-Transactions within high-risk categories such as online shopping and groceries, as well as those occurring during late-night hours (22:00-03:00) were significantly more likely to be fraudulent.
-
 ## Live Demo
 
 - API: https://live-fraud-detection-agent.onrender.com
@@ -25,284 +20,186 @@ Transactions within high-risk categories such as online shopping and groceries, 
 
 ## Table of Contents
 
-  - [Business context](#business-context)
-  - [Data source](#data-source)
-  - [Methods](#methods)
-  - [Tech Stack](#tech-stack)
-  - [Quick Start](#quick-start)
-  - [System flow](#system-flow)
-  - [Why Redis is here](#why-redis-is-here)
-  - [Review flow](#review-flow)
-  - [Quick glance at the results](#quick-glance-at-the-results)
-  - [Lessons learned and recommendation](#lessons-learned-and-recommendation)
-  - [Limitation and what can be improved](#limitation-and-what-can-be-improved)
-  - [Repository structure](#repository-structure)
-  - [Agentic Decision Pipeline](#agentic-decision-pipeline)
-  - [Additional Docs](#additional-docs)
-
-
-## Business context
-This project identifies fraudulent credit card transactions in real time by combining XGBoost machine learning with an agentic LLM investigator. It is a full workflow that scores transactions through an API, applies a business risk policy, stores prediction history, opens review cases for suspicious activity, and lets a human reviewer make the final call when needed.
-
-Risk operations teams and fintech institutions can use a system like this to automate high-volume triage, reduce financial loss from chargebacks, and keep a human-in-the-loop layer for higher-risk decisions.
-
-## Data source
-
-- https://www.kaggle.com/datasets/kartik2112/fraud-detection
-
-## Methods
-
-- **Two Step Security System:** Built a dual-engine decision flow where XGBoost scores every transaction first, then a policy layer decides whether to approve, review, or block it. Suspicious cases get passed into an LLM-based review step for extra investigation.
-
-- **Behavioural Feature engineering:** Engineered features around transaction category, geographical location, and temporal density (hour/day), with late-night activity (22:00-03:00) showing up as one of the strongest fraud signals.
-
-- **Agentic Reasoning & HITL:** Built an asynchronous Human-In-The-Loop (HITL) workflow where the LLM agent explains suspicious patterns, generates reviewer-facing reasoning, and supports a manual verdict flow for high-risk cases.
-
-- **Fast, Stateful Backend:** Used FastAPI to expose the scoring flow as a real API, added PostgreSQL persistence for predictions and fraud cases, and used Redis for request deduplication and sliding-window rate limiting so the system behaves more like a real production service.
-
-- **Reviewer Console:** Added a Streamlit dashboard to simulate a lightweight fraud-ops console where pending cases, transaction details, model outputs, and human decisions can all be viewed in one place.
-
-
-## Tech Stack
-
-- **Python** (refer to `pyproject.toml` for the main packages used in this project)
-- **Scikit-learn and XGBoost** (machine learning, classification, and feature importance evaluation)
-- **FastAPI** (real-time inference API and review endpoints)
-- **LangGraph and LangChain** (orchestration of agentic reasoning, state management, and HITL transitions)
-- **Groq** (LLM inference provider used for behavioural reasoning and investigation)
-- **PostgreSQL and SQLAlchemy** (prediction persistence, fraud case storage, and reviewer history)
-- **Redis** (request deduplication and sliding-window rate limiting)
-- **Streamlit** (review dashboard for pending fraud cases)
-- **Docker Compose** (local multi-service setup for API, Postgres, Redis, and pgAdmin)
-
-## Quick Start
-
-Follow these steps to launch the API, run the full simulation, and inspect the review workflow on your local machine.
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Deployment](#deployment)
+- [MLOps & Observability](#mlops--observability)
+- [Quick Start](#quick-start)
+- [API Reference](#api-reference)
+- [Model Performance](#model-performance)
+- [Limitations & Trade-offs](#limitations--trade-offs)
+- [Repository Structure](#repository-structure)
 
 ---
 
-**1. Prerequisites**
+## Architecture
 
-- Python 3.11+
-- Groq API Key: Get one at groq.com.
-- uv: Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux) or `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+The system uses a dual-engine decision pipeline: an XGBoost classifier for fast bulk scoring, and a LangGraph-based LLM agent for contextual investigation of borderline cases. A risk policy layer translates raw probabilities into business actions (`APPROVE`, `REVIEW`, `BLOCK`), and suspicious cases enter a Human-In-The-Loop review workflow.
 
-**2. Setup & Installation**
-Clone the repo and initialize the environment. Copy the example environment file first so your local secrets stay out of Git.
+```
+Transaction → API → XGBoost Score → Risk Policy ──┬─ Low/Medium → Auto-approve
+                                                    └─ High/Critical → LLM Agent → Human Review
+```
 
-**Bash**
+### Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **XGBoost for scoring** | Provides calibrated probabilities with sub-millisecond inference. Outperforms neural nets on tabular data at this scale. |
+| **LangGraph agent for grey areas** | Rule-based thresholds alone miss context (e.g., high amount at a known merchant vs. unknown). The agent queries merchant history, velocity, and geo-anomaly before recommending an action. |
+| **Redis for rate limiting + dedup** | Sliding-window counter prevents API abuse. Request fingerprinting avoids re-scoring identical payloads. Both are fast-path operations that don't touch Postgres. |
+| **PostgreSQL for persistence** | Predictions and review cases need ACID guarantees, foreign key relationships, and ad-hoc querying for the dashboard and agent tools. |
+| **Risk policy as a configurable layer** | Keeps business rules decoupled from model logic. Thresholds and actions can change without retraining. |
+
+### Request Lifecycle
+
+1. `POST /api/v1/predict` receives a transaction payload
+2. Redis sliding-window rate limiter checks request volume
+3. Request fingerprinted against recent keys — duplicate check
+4. `preprocess_features()` engineers temporal, geospatial, and categorical features
+5. XGBoost returns fraud probability
+6. `classify_risk()` maps probability → `APPROVE` / `REVIEW` / `BLOCK`
+7. Prediction persisted to Postgres
+8. If `REVIEW` or `BLOCK` → LLM agent investigates via merchant history, velocity, and geo tools
+9. Agent report stored alongside the prediction in a `FraudCase`
+10. Dashboard polls `/cases/pending` for human review
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Language** | Python 3.11+ (uv for dependency management) |
+| **API Framework** | FastAPI + Uvicorn (async, auto-docs via Swagger/ReDoc) |
+| **ML Model** | XGBoost (trained on ~1.3M transactions) |
+| **LLM Agent** | Groq (llama-3.3-70b) via LangChain / LangGraph |
+| **LLM Observability** | LangSmith (tracing, evaluation) |
+| **Database** | PostgreSQL 16 + SQLAlchemy (async-capable) |
+| **Cache / Rate Limiting** | Redis 7 |
+| **Feature Engineering** | Pandas, NumPy → stdlib `math` (optimized for inference) |
+| **Dashboard** | Streamlit + Plotly |
+| **Containerization** | Docker multi-stage build + Docker Compose |
+
+## Deployment
+
+| Service | Platform | URL | Uptime |
+|---|---|---|---|
+| API | Render (Docker) | https://live-fraud-detection-agent.onrender.com | Always-on via keep-alive cron |
+| Dashboard | Hugging Face Spaces (Streamlit SDK) | https://mhmdxch-fraud-dashboard.hf.space | Warm via keep-alive cron |
+| Database | Supabase (PostgreSQL) | Managed | 24/7 |
+| Redis | Redis Cloud (Free 30MB) | Managed | 24/7 |
+
+**Keep-alive:** GitHub Actions runs every 5 minutes (`/.github/workflows/keep-awake.yml`) to prevent cold starts on free-tier services.
+
+## MLOps & Observability
+
+- **CI/CD:** GitHub Actions for scheduled keep-alive and deployment triggers
+- **Containerization:** Multi-stage Docker build (builder → slim runtime, non-root user)
+- **Model Versioning:** XGBoost model stored in JSON format (`model/fraud_model.json`) — git-tracked and diffable
+- **Feature Pipeline:** Deterministic preprocessing (`src/features.py`) — same code for training and inference
+- **LLM Tracing:** LangSmith captures every agent invocation, tool call, and decision for debugging and evaluation
+- **Evaluation:** LangSmith eval scripts in `evals/` for regression testing agent behavior
+- **Health Checks:** API exposes `/` health endpoint consumed by Render and the dashboard
+- **Secret Management:** Environment variables via `.env` locally, Render secrets in production
+- **Output Guardrails:** PII redaction and prompt injection detection on agent output (`src/output_guard.py`)
+- **API Documentation:** Auto-generated OpenAPI spec at `/docs`
+
+## Quick Start
+
+**Prerequisites:** Python 3.11+, Groq API key, `uv` installed.
 
 ```bash
 git clone https://github.com/coder-red/live-fraud-detection-agent/
-
-# Copy the sample environment and fill in your real values
-cp .env.example .env
-
-# Synchronize dependencies and create the virtual environment
+cp .env.example .env   # fill in your keys
 uv sync
 ```
 
-If you're on Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then update `.env` with the values you want to use.
-
-- `GROQ_API_KEY` powers the LLM review path
-- `REDIS_URL` powers deduplication and rate limiting
-- `POSTGRES_*` values are used by Docker Compose to build the database connection
-
-If `GROQ_API_KEY` is missing, the app still works and falls back to deterministic review text.
-
-**3. Run the API Only**
-If you just want the API and Swagger UI:
-
+**Run the API:**
 ```bash
 uv run uvicorn app.main:app --reload
 ```
 
-Then open:
-
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/`
-
-**4. Run the Docker Stack**
-The default Compose stack starts `api`, `postgres`, and `redis`.
-
-```bash
-docker compose up --build
-```
-
-To start pgAdmin too:
-
-```bash
-docker compose --profile devtools up --build
-```
-
-**5. Run the Review Dashboard**
-If you want the reviewer console:
-
+**Run the dashboard:**
 ```bash
 uv run streamlit run dashboard.py
 ```
 
-**6. Run Tests**
-Run the automated test suite:
+**Run with full stack (Docker):**
+```bash
+docker compose up --build
+```
 
+**Run tests:**
 ```bash
 uv run pytest tests
 ```
 
-If you want to manually see the rate limiter return a `429`, use the smoke test script while the API is running:
+## API Reference
 
-```bash
-uv run python scripts/test_rate_limit.py
-```
+Full API docs at `/docs` when running, or see [`docs/API.md`](docs/API.md).
 
-## System flow
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Health check |
+| `/api/v1/predict` | POST | Score a transaction |
+| `/api/v1/predictions` | GET | List predictions (paginated) |
+| `/api/v1/cases/pending` | GET | Pending review cases |
+| `/api/v1/cases/resolved` | GET | Resolved cases |
+| `/api/v1/cases/{id}/decision` | POST | Submit human verdict |
+| `/api/v1/stream` | GET | SSE live feed |
+| `/api/v1/predictions/run-simulation` | POST | Generate test transactions |
 
-This is the backend flow the app follows:
+## Model Performance
 
-1. A transaction hits `POST /api/v1/predict`
-2. Redis checks for spammy request volume through a sliding-window rate limiter
-3. The request is fingerprinted so duplicate transactions can be reused instead of scored again
-4. XGBoost scores the transaction
-5. A risk policy converts the score into `APPROVE`, `REVIEW`, or `BLOCK`
-6. Predictions and review cases are stored in Postgres
-7. High-risk cases can be reviewed by the agent and then resolved by a human
+XGBoost classifier trained on ~1.3M transactions from the [Kaggle Fraud Detection dataset](https://www.kaggle.com/datasets/kartik2112/fraud-detection).
 
-## Review flow
+**Top predictive signals:**
+- Merchant category (`shopping_net`, `misc_net`, `grocery_pos`)
+- Late-night activity (22:00–03:00)
+- Geographic distance between cardholder and merchant
+- Transaction amount relative to typical spending
 
-This is the part that makes the system more useful than a plain fraud score.
+**Decision Layer:** Raw probability is mapped through a configurable risk policy (`src/policy.py`) into business actions rather than exposing probability alone.
 
-- Low-risk transactions can pass automatically.
-- Higher-risk transactions can be saved as review cases instead of just returning a score and disappearing.
-- The agent adds reasoning, reason codes, and reviewer questions to help explain why the case looks suspicious.
-- A human reviewer can still make the final call when the case needs judgment instead of pure automation.
+## Limitations & Trade-offs
 
+- **Static model:** XGBoost is not retrained online. Fraud patterns that drift require a full retraining cycle.
+- **No authentication:** API is open for demo purposes. Production would need API keys, rate limiting per user, and RBAC.
+- **Dual-engine latency:** The LLM agent adds 2–5s for grey-area cases. Acceptable for review workflows, not for real-time blocking.
+- **No database migrations:** Uses `create_all()` for simplicity. Alembic or similar would be needed for schema evolution.
 
-## Quick glance at the results
-
-I kept the results section short on purpose because this repo is more about the full AI workflow than just the training notebook.
-
-- **What mattered most:** merchant category, night-time activity, and geography-based behaviour
-- **Model goal:** catch fraud without creating too much reviewer noise
-- **Decision layer:** raw model output is converted into `APPROVE`, `REVIEW`, or `BLOCK` through a risk policy instead of exposing probability alone
-
-If you want the deeper EDA/training side, check the notebooks and plots in `notebooks/` and `assets/`.
-
-![Feature Importance](assets/features.png)
-
-## Lessons Learned and Recommendations
-
-**What I found:**
-
-- **Dual-Engine vs. Single Model Performance:** While XGBoost is efficient at scoring bulk transactions, adding the LangGraph AI agent was better for the grey-area cases because it adds context-aware reasoning on top of the raw score.
-
-- **Mid Nights are High Risk:** There was extreme concentration of fraudulent activity during late hours (22:00 - 03:00) across all days of the week. This made time of day one of the most important signals.
-
-- **Weekends showed no value:** Interestingly, `is_weekend` had zero importance in the model's decision-making process. The data suggests fraud followed an hourly cycle more than a day-of-week cycle, which made specific time signals more useful than the calendar day itself.
-
-- **The transaction category mattered most:** The merchant category was the strongest predictor of fraud, with `shopping_net`, `misc_net` and `grocery_pos` showing fraud rates significantly higher than the baseline average. This confirms that fraudsters tend to prioritize specific merchant types.
-
-**Recommendation:**
-- Regularly retrain the model on updated transaction data so the system can adapt as fraud patterns change.
-
-## Limitation and What Can Be Improved
-
-**Limitation**
-- The model relies heavily on historical risk levels for specific merchant categories. If a new category of merchant emerges or a fraudster switches to a previously safe category, the system may require a full retraining cycle to recognize the new pattern.
-- The current app is still a local-first system. It does not yet include authentication, database migrations, or a full production deployment layer.
-
-**What Can Be Improved**
-- Dynamic Re-training Pipeline: Implement an automated sliding-window pipeline to re-train the XGBoost model daily. This would help the system adapt to phases where fraudster behaviour changes.
-- Add authentication and reviewer roles for case-management endpoints.
-- Replace `create_all()` with proper database migrations.
-- Add monitoring, drift tracking, and deployment hardening.
-
-## Repository structure
+## Repository Structure
 
 <details>
-  <summary><strong>Repository Structure (click to expand)</strong></summary>
+  <summary><strong>Click to expand</strong></summary>
 
 ```text
 .
-|-- Dockerfile
-|-- README.md
-|-- agents
-|   |-- fraud_agents.py
-|   `-- tools.py
-|-- app
-|   |-- __init__.py
-|   |-- db
-|   |   |-- __init__.py
-|   |   |-- connections.py
-|   |   `-- models.py
-|   |-- main.py
-|   `-- routes.py
-|-- assets
-|   |-- FRAUD.png
-|   |-- confusion.png
-|   |-- features.png
-|   `-- target.png
-|-- config.py
-|-- dashboard.py
-|-- data
-|   `-- sample_transactions.csv
-|-- docker-compose.yml
-|-- docs
-|   |-- API.md
-|   `-- ROADMAP.md
-|-- model
-|   |-- feature_list.pkl
-|   `-- fraud_model.json
-|-- notebooks
-|   |-- 01_eda.ipynb
-|   `-- 02_training.ipynb
-|-- pyproject.toml
-|-- requirements-dev.txt
-|-- requirements.txt
-|-- scripts
-|   |-- generate_sample_transactions.py
-|   `-- test_rate_limit.py
-|-- src
-|   |-- __init__.py
-|   |-- agent_review.py
-|   |-- features.py
-|   |-- inference.py
-|   |-- policy.py
-|   `-- transaction_generator.py
-|-- tests
-|   |-- test_agent_review.py
-|   |-- test_api.py
-|   |-- test_features.py
-|   `-- test_policy.py
-`-- uv.lock
+├── Dockerfile              # Multi-stage production build
+├── docker-compose.yml      # Local dev stack (API + Postgres + Redis)
+├── pyproject.toml          # Project metadata + dependencies
+├── app/
+│   ├── main.py             # FastAPI entrypoint
+│   ├── routes.py           # All API endpoints
+│   ├── events.py           # SSE event manager
+│   └── db/
+│       ├── connections.py  # DB engine, Redis client, session management
+│       └── models.py       # SQLAlchemy ORM (FraudPrediction, FraudCase)
+├── src/
+│   ├── inference.py        # XGBoost model loading and inference
+│   ├── features.py         # Feature engineering
+│   ├── policy.py           # Risk classification
+│   ├── agent_review.py     # LLM investigator agent
+│   ├── output_guard.py     # PII redaction
+│   └── transaction_generator.py  # Synthetic transaction generator
+├── agents/
+│   └── tools.py            # DB tools (merchant history, velocity, geo)
+├── dashboard.py            # Streamlit review console
+├── model/
+│   ├── fraud_model.json    # Trained XGBoost model
+│   └── feature_list.pkl    # Feature column order
+├── tests/                  # pytest suite
+├── evals/                  # LangSmith evaluation scripts
+└── docs/                   # API docs + roadmap
 ```
 
 </details>
-
-## Agentic Decision Pipeline
-
-<details>
-  <summary><strong>Agentic Decision Pipeline (click to expand)</strong></summary>
-
-```mermaid
-flowchart LR
-    A[Transaction] --> B[API Call]
-    B --> C[Model Score]
-    C --> D[Risk Policy]
-    D --> E{Decision}
-    E -->|Low / Medium| F[Auto-approve]
-    E -->|High / Critical| G[Agent Review]
-    G --> H[Human Decision]
-```
-
-</details>
-
-## Additional Docs
-
-- [API Reference](docs/API.md)
-- [Roadmap](docs/ROADMAP.md)
