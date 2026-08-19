@@ -3,7 +3,7 @@ from collections.abc import Generator
 
 from dotenv import load_dotenv
 from redis import asyncio as redis_asyncio
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 # a session is the main way to interact with the database. It manages connections and transactions.
 
@@ -67,6 +67,16 @@ def init_db() -> None:
 
     # create_all creates missing tables; it does not delete existing data.
     Base.metadata.create_all(bind=engine)
+
+
+def ping_db() -> bool:
+    """Return True if the database is reachable, False otherwise (no raise)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 
 def get_db() -> Generator[Session, None, None]:
